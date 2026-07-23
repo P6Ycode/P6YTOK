@@ -1,5 +1,6 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
+#import <stdlib.h>
 #import "P6YManager.h"
 
 static const NSInteger P6YFollowerTrackerButtonTag = 46011;
@@ -111,12 +112,10 @@ static NSDictionary *P6YFollowerObserve(id adaptor, id user) {
     long long currentCount = 0;
     if (!profileKey.length || !P6YFollowerCount(user, &currentCount)) return nil;
 
-    NSTimeInterval now = NSDate.date.timeIntervalSince1970;
     NSDictionary *session = objc_getAssociatedObject(adaptor, P6YFollowerTrackerSessionKey);
-    if ([session[@"profileKey"] isEqualToString:profileKey] && now - [session[@"sessionTime"] doubleValue] < 30.0) {
-        return session;
-    }
+    if ([session[@"profileKey"] isEqualToString:profileKey]) return session;
 
+    NSTimeInterval now = NSDate.date.timeIntervalSince1970;
     NSMutableDictionary *store = P6YFollowerMutableStore();
     NSMutableDictionary *record = [store[profileKey] mutableCopy] ?: [NSMutableDictionary dictionary];
     NSNumber *previousCountNumber = record[@"count"];
@@ -154,8 +153,7 @@ static NSDictionary *P6YFollowerObserve(id adaptor, id user) {
         @"delta": @(delta),
         @"firstVisit": @(firstVisit),
         @"previousVisit": @(previousVisit),
-        @"observedAt": @(now),
-        @"sessionTime": @(now)
+        @"observedAt": @(now)
     };
     objc_setAssociatedObject(adaptor, P6YFollowerTrackerSessionKey, snapshot, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     return snapshot;
@@ -269,10 +267,8 @@ static void P6YFollowerUpdateButton(id adaptor, id user) {
     [button setTitleColor:titleColor forState:UIControlStateNormal];
     objc_setAssociatedObject(button, P6YFollowerTrackerProfileKey, snapshot[@"profileKey"], OBJC_ASSOCIATION_COPY_NONATOMIC);
 
-    UIView *existingBadge = [view viewWithTag:46010];
-    CGFloat y = existingBadge ? CGRectGetMaxY(existingBadge.frame) + 6.0 : 8.0;
     CGFloat width = MIN(290.0, MAX(210.0, view.bounds.size.width - 24.0));
-    button.frame = CGRectMake(MAX(8.0, view.bounds.size.width - width - 12.0), y, width, 48.0);
+    button.frame = CGRectMake(MAX(8.0, view.bounds.size.width - width - 12.0), 42.0, width, 48.0);
     [view bringSubviewToFront:button];
 }
 
