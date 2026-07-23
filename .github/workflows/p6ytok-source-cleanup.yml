@@ -1,0 +1,78 @@
+name: P6YTOK one-time source cleanup
+
+on:
+  push:
+    branches:
+      - revive-tiktok-46.1.0
+    paths:
+      - .github/workflows/p6ytok-source-cleanup.yml
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: revive-tiktok-46.1.0
+          fetch-depth: 0
+
+      - name: Remove legacy lock source and finalize LIVE zoom
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          tweak = Path('Tweak.x')
+          text = tweak.read_text()
+          text = text.replace('#import "SecurityViewController.h"\n', '')
+
+          lock_method = '''
+          - (void)applicationDidBecomeActive:(UIApplication *)application {
+              %orig;
+              if (![P6YManager boolForKey:@"p6y_app_lock"]) return;
+              UIViewController *top = [P6YManager topViewController];
+              if ([top isKindOfClass:[SecurityViewController class]]) return;
+              SecurityViewController *lock = [[SecurityViewController alloc] init];
+              lock.modalPresentationStyle = UIModalPresentationFullScreen;
+              [top presentViewController:lock animated:NO completion:nil];
+          }
+          '''
+          if lock_method not in text:
+              raise SystemExit('Expected legacy applicationDidBecomeActive lock block was not found')
+          text = text.replace(lock_method, '')
+          text = text.replace(
+              'item.detail = @"Downloads, feed, profile, and security";',
+              'item.detail = @"Downloads, feed, LIVE, profile, and tools";'
+          )
+          tweak.write_text(text)
+
+          makefile = Path('Makefile')
+          make_text = makefile.read_text().replace(' SettingsViewController.m SecurityViewController.m', ' SettingsViewController.m')
+          makefile.write_text(make_text)
+
+          live = Path('P6YLiveZoom.x')
+          live_text = live.read_text()
+          if '#import <string.h>' not in live_text:
+              live_text = live_text.replace('#import <objc/runtime.h>\n', '#import <objc/runtime.h>\n#import <string.h>\n')
+          live.write_text(live_text)
+
+          for obsolete in ('SecurityViewController.m', 'SecurityViewController.h'):
+              path = Path(obsolete)
+              if path.exists():
+                  path.unlink()
+
+          Path('.github/workflows/p6ytok-source-cleanup.yml').unlink()
+          PY
+
+      - name: Commit cleanup
+        shell: bash
+        run: |
+          git config user.name "P6YTOK Automation"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "Remove legacy security stub and finalize LIVE zoom"
+          git push origin HEAD:revive-tiktok-46.1.0
