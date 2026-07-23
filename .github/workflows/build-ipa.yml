@@ -1,6 +1,11 @@
 name: Build P6YTOK IPA
 
 on:
+  push:
+    branches:
+      - revive-tiktok-46.1.0
+    paths-ignore:
+      - .github/last-build-result.txt
   workflow_dispatch:
     inputs:
       ipa_url:
@@ -9,7 +14,7 @@ on:
         type: string
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: p6ytok-ipa-${{ github.ref }}
@@ -27,6 +32,116 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+
+      - name: Audit source structure
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          def strip_comments_and_literals(text: str) -> str:
+              output = []
+              state = "normal"
+              index = 0
+              while index < len(text):
+                  char = text[index]
+                  next_char = text[index + 1] if index + 1 < len(text) else ""
+                  if state == "normal":
+                      if char == "/" and next_char == "/":
+                          state = "line_comment"
+                          output.extend("  ")
+                          index += 2
+                          continue
+                      if char == "/" and next_char == "*":
+                          state = "block_comment"
+                          output.extend("  ")
+                          index += 2
+                          continue
+                      if char == '"':
+                          state = "string"
+                          output.append(" ")
+                          index += 1
+                          continue
+                      if char == "'":
+                          state = "char"
+                          output.append(" ")
+                          index += 1
+                          continue
+                      output.append(char)
+                  elif state == "line_comment":
+                      if char == "\n":
+                          state = "normal"
+                          output.append("\n")
+                      else:
+                          output.append(" ")
+                  elif state == "block_comment":
+                      if char == "*" and next_char == "/":
+                          state = "normal"
+                          output.extend("  ")
+                          index += 2
+                          continue
+                      output.append("\n" if char == "\n" else " ")
+                  elif state in ("string", "char"):
+                      if char == "\\":
+                          output.extend("  ")
+                          index += 2
+                          continue
+                      closing = '"' if state == "string" else "'"
+                      if char == closing:
+                          state = "normal"
+                      output.append("\n" if char == "\n" else " ")
+                  index += 1
+              return "".join(output)
+
+          sources = [Path(name) for name in (
+              "Tweak.x", "P6YMediaQuality.x", "P6YLiveZoom.x", "P6YFollowerTracker.x",
+              "P6YStoryTimer.m", "P6YLikesCleanup.m", "P6YManager.m",
+              "P6YDownloadManager.m", "P6YDownloadManager+FullQuality.m",
+              "SettingsViewController.m"
+          )]
+          missing = [str(path) for path in sources if not path.exists()]
+          if missing:
+              raise SystemExit(f"Missing source files: {missing}")
+
+          for path in sources:
+              text = path.read_text(encoding="utf-8")
+              clean = strip_comments_and_literals(text)
+              for opening, closing, label in (("{", "}", "braces"), ("(", ")", "parentheses"), ("[", "]", "brackets")):
+                  depth = 0
+                  for line_number, line in enumerate(clean.splitlines(), 1):
+                      for char in line:
+                          if char == opening:
+                              depth += 1
+                          elif char == closing:
+                              depth -= 1
+                              if depth < 0:
+                                  raise SystemExit(f"{path}:{line_number}: unmatched closing {closing}")
+                  if depth != 0:
+                      raise SystemExit(f"{path}: unbalanced {label}: {depth}")
+
+              if path.suffix == ".x":
+                  if text.count("%hook") != text.count("%end"):
+                      raise SystemExit(f"{path}: unbalanced %hook/%end")
+                  if "{ %orig;" in text or "%orig; return;" in text:
+                      raise SystemExit(f"{path}: inline %orig control flow remains")
+                  cursor = 0
+                  while True:
+                      start = text.find("%hook", cursor)
+                      if start < 0:
+                          break
+                      end = text.find("%end", start)
+                      if end < 0:
+                          raise SystemExit(f"{path}: hook without %end")
+                      if "^{" in text[start:end]:
+                          raise SystemExit(f"{path}: block literal remains inside a Logos hook")
+                      cursor = end + 4
+
+          tweak = Path("Tweak.x").read_text(encoding="utf-8")
+          if tweak.count("static void P6YConfirmVoidAction") != 1:
+              raise SystemExit("Tweak.x must contain exactly one P6YConfirmVoidAction helper")
+          if tweak.count("static void P6YConfirmObjectAction") != 1:
+              raise SystemExit("Tweak.x must contain exactly one P6YConfirmObjectAction helper")
+          print("Source audit passed")
+          PY
 
       - name: Resolve base IPA
         shell: bash
@@ -69,7 +184,8 @@ jobs:
               token in str(asset.get("name", "")).lower()
               for token in ("46.1.0", "461034", "tiktok")
           )]
-          print((preferred or candidates)[0]["browser_download_url"])
+          selected = (preferred or candidates)[0]
+          print(selected["browser_download_url"])
           PY
             )"
           fi
@@ -88,12 +204,12 @@ jobs:
       - name: Install Theos
         run: git clone -q --depth 1 --recurse-submodules --shallow-submodules https://github.com/theos/theos.git "$THEOS"
 
-      - name: Build P6YTOK package
+      - name: Build P6YTOK package serially
         run: |
           set -euo pipefail
           rm -rf packages .theos artifacts
           mkdir -p artifacts
-          make clean package FINALPACKAGE=1 2>&1 | tee artifacts/build.log
+          make -j1 clean package FINALPACKAGE=1 2>&1 | tee artifacts/build.log
           DEB="$(find packages -type f -name '*.deb' -print | sort | tail -n 1)"
           test -n "$DEB"
           cp "$DEB" artifacts/P6YTOK_0.1.6_iphoneos-arm.deb
@@ -138,6 +254,7 @@ jobs:
 
       - name: Install Azule injector
         run: |
+          set -euo pipefail
           AZULE_DIR="$RUNNER_TEMP/Azule"
           git clone -q --depth 1 https://github.com/mpelteshki/Azule.git "$AZULE_DIR"
           chmod +x "$AZULE_DIR/azule"
@@ -161,3 +278,75 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
+
+      - name: Publish build result
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILD_STATUS: ${{ job.status }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          HEAD_SHA: ${{ github.sha }}
+          BRANCH_NAME: ${{ github.ref_name }}
+        run: |
+          python3 <<'PY'
+          import base64
+          import json
+          import os
+          import pathlib
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+
+          log = pathlib.Path("artifacts/build.log")
+          lines = log.read_text(errors="replace").splitlines() if log.exists() else []
+          markers = (" error:", "fatal error:", "undefined symbols", "make[", "expected '", "no usable base", "curl:")
+          indexes = [index for index, line in enumerate(lines) if any(marker in line.lower() for marker in markers)]
+          relevant = []
+          for index in indexes[:12]:
+              relevant.extend(lines[max(0, index - 4):min(len(lines), index + 12)])
+              relevant.append("---")
+          if not relevant and lines:
+              relevant = lines[-120:]
+          relevant = relevant[:220]
+
+          report = "\n".join([
+              f"Status: {os.environ['BUILD_STATUS']}",
+              f"Run: {os.environ['RUN_URL']}",
+              f"Source commit: {os.environ['HEAD_SHA']}",
+              "",
+              "Relevant output:",
+              *(relevant or ["No compiler log was created."]),
+              "",
+          ])
+
+          api = os.environ["GITHUB_API_URL"]
+          repo = os.environ["GITHUB_REPOSITORY"]
+          branch = os.environ["BRANCH_NAME"]
+          path = ".github/last-build-result.txt"
+          url = f"{api}/repos/{repo}/contents/{path}"
+          headers = {
+              "Accept": "application/vnd.github+json",
+              "Authorization": f"Bearer {os.environ['GH_TOKEN']}",
+              "X-GitHub-Api-Version": "2022-11-28",
+              "Content-Type": "application/json",
+          }
+          sha = None
+          try:
+              request = urllib.request.Request(f"{url}?ref={urllib.parse.quote(branch)}", headers=headers)
+              with urllib.request.urlopen(request) as response:
+                  sha = json.load(response).get("sha")
+          except urllib.error.HTTPError as error:
+              if error.code != 404:
+                  raise
+
+          payload = {
+              "message": "Record latest P6YTOK build result [skip ci]",
+              "branch": branch,
+              "content": base64.b64encode(report.encode()).decode(),
+          }
+          if sha:
+              payload["sha"] = sha
+          request = urllib.request.Request(url, data=json.dumps(payload).encode(), headers=headers, method="PUT")
+          with urllib.request.urlopen(request) as response:
+              json.load(response)
+          PY
