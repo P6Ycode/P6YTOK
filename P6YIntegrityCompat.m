@@ -12,7 +12,6 @@ static BOOL P6YReturnNo0(id self, SEL _cmd) { return NO; }
 static BOOL P6YReturnNo1(id self, SEL _cmd, id arg1) { return NO; }
 static BOOL P6YReturnNo2(id self, SEL _cmd, id arg1, id arg2) { return NO; }
 static BOOL P6YReturnYes0(id self, SEL _cmd) { return YES; }
-static id P6YReturnAppStore0(id self, SEL _cmd) { return @"AppStore"; }
 
 static NSString *(*P6YOriginalBundlePathForResource)(NSBundle *, SEL, NSString *, NSString *);
 static NSURL *(*P6YOriginalBundleURLForResource)(NSBundle *, SEL, NSString *, NSString *);
@@ -38,12 +37,6 @@ static BOOL P6YMethodReturnsBool(Method method) {
     return type[0] == 'B' || type[0] == 'c';
 }
 
-static BOOL P6YMethodReturnsObject(Method method) {
-    char type[16] = {0};
-    method_getReturnType(method, type, sizeof(type));
-    return type[0] == '@';
-}
-
 static BOOL P6YImageBelongsToTikTok(Class cls) {
     const char *imageName = class_getImageName(cls);
     if (!imageName) return NO;
@@ -55,27 +48,20 @@ static BOOL P6YImageBelongsToTikTok(Class cls) {
 static IMP P6YReplacementForMethod(Method method, NSString *selectorName) {
     NSString *lower = selectorName.lowercaseString;
     unsigned int argumentCount = method_getNumberOfArguments(method);
+    if (!P6YMethodReturnsBool(method)) return NULL;
 
-    if (P6YMethodReturnsBool(method)) {
-        BOOL cleanResult = [lower containsString:@"jail"] ||
-                           [lower containsString:@"rooted"] ||
-                           [lower isEqualToString:@"isdebugbuild"] ||
-                           [lower isEqualToString:@"isappstorereceiptsandbox"];
-        BOOL appStoreResult = [lower isEqualToString:@"isfromappstore"] ||
-                              [lower isEqualToString:@"isappstore"];
+    BOOL cleanResult = [lower containsString:@"jail"] ||
+                       [lower containsString:@"rooted"] ||
+                       [lower isEqualToString:@"isdebugbuild"] ||
+                       [lower isEqualToString:@"isappstorereceiptsandbox"];
+    BOOL appStoreResult = [lower isEqualToString:@"isfromappstore"] ||
+                          [lower isEqualToString:@"isappstore"];
 
-        if (appStoreResult && argumentCount == 2) return (IMP)P6YReturnYes0;
-        if (!cleanResult) return NULL;
-        if (argumentCount == 2) return (IMP)P6YReturnNo0;
-        if (argumentCount == 3) return (IMP)P6YReturnNo1;
-        if (argumentCount == 4) return (IMP)P6YReturnNo2;
-        return NULL;
-    }
-
-    if (P6YMethodReturnsObject(method) && [lower isEqualToString:@"signinfo"] && argumentCount == 2) {
-        return (IMP)P6YReturnAppStore0;
-    }
-
+    if (appStoreResult && argumentCount == 2) return (IMP)P6YReturnYes0;
+    if (!cleanResult) return NULL;
+    if (argumentCount == 2) return (IMP)P6YReturnNo0;
+    if (argumentCount == 3) return (IMP)P6YReturnNo1;
+    if (argumentCount == 4) return (IMP)P6YReturnNo2;
     return NULL;
 }
 
