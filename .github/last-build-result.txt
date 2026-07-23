@@ -1,0 +1,6 @@
+Status: failure
+Run: https://github.com/P6Ycode/P6YTOK/actions/runs/30048215663
+Source commit: 081f032838785fb3eefce6bd35532cf18149b5b6
+
+Relevant output:
+No compiler log was created.
