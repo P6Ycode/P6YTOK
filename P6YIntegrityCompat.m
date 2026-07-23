@@ -1,5 +1,7 @@
 #import <Foundation/Foundation.h>
+#import <dispatch/dispatch.h>
 #import <objc/runtime.h>
+#import <stdlib.h>
 
 static NSString * const P6YIntegrityEnabledKey = @"p6y_integrity_compat";
 static NSMutableSet<NSString *> *P6YHookedIntegrityMethods;
@@ -104,6 +106,7 @@ static void P6YScanTikTokIntegrityMethods(void) {
     int count = objc_getClassList(NULL, 0);
     if (count <= 0) return;
     Class *classes = (__unsafe_unretained Class *)calloc((size_t)count, sizeof(Class));
+    if (!classes) return;
     count = objc_getClassList(classes, count);
 
     for (int index = 0; index < count; index++) {
@@ -119,13 +122,13 @@ static void P6YScanTikTokIntegrityMethods(void) {
 static void P6YInstallBundleProvisionCompatibility(void) {
     Method pathMethod = class_getInstanceMethod(NSBundle.class, @selector(pathForResource:ofType:));
     if (pathMethod) {
-        P6YOriginalBundlePathForResource = (void *)method_getImplementation(pathMethod);
+        P6YOriginalBundlePathForResource = (NSString *(*)(NSBundle *, SEL, NSString *, NSString *))method_getImplementation(pathMethod);
         method_setImplementation(pathMethod, (IMP)P6YBundlePathForResource);
     }
 
     Method urlMethod = class_getInstanceMethod(NSBundle.class, @selector(URLForResource:withExtension:));
     if (urlMethod) {
-        P6YOriginalBundleURLForResource = (void *)method_getImplementation(urlMethod);
+        P6YOriginalBundleURLForResource = (NSURL *(*)(NSBundle *, SEL, NSString *, NSString *))method_getImplementation(urlMethod);
         method_setImplementation(urlMethod, (IMP)P6YBundleURLForResource);
     }
 }
