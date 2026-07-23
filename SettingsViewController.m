@@ -1,129 +1,168 @@
 #import "SettingsViewController.h"
+#import "P6YManager.h"
 
-static UIColor *P6YTOKRedColor(void) {
-    return [UIColor colorWithRed:0.92 green:0.05 blue:0.12 alpha:1.0];
+static UIColor *P6YRed(void) {
+    return [UIColor colorWithRed:0.90 green:0.00 blue:0.04 alpha:1.0];
 }
+
+@interface SettingsViewController ()
+@property (nonatomic, copy) NSArray<NSDictionary *> *sections;
+@end
 
 @implementation SettingsViewController
 
 - (instancetype)init {
-    self = [super init];
-    if (self) {
-        self.title = @"P6YTOK";
-
-        HBAppearanceSettings *appearance = [HBAppearanceSettings new];
-        appearance.tableViewBackgroundColor = UIColor.blackColor;
-        appearance.tableViewCellBackgroundColor = [UIColor colorWithWhite:0.08 alpha:1.0];
-        self.hb_appearanceSettings = appearance;
-    }
-    return self;
+    return [super initWithStyle:UITableViewStyleInsetGrouped];
 }
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-
+    [P6YManager registerDefaults];
+    self.title = @"P6YTOK";
     self.view.backgroundColor = UIColor.blackColor;
     self.tableView.backgroundColor = UIColor.blackColor;
-    self.navigationController.navigationBar.barStyle = UIBarStyleBlack;
-    self.navigationController.navigationBar.tintColor = P6YTOKRedColor();
-    self.navigationController.navigationBar.titleTextAttributes = @{
-        NSForegroundColorAttributeName: UIColor.whiteColor
-    };
-    self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone
-                                                                                           target:self
-                                                                                           action:@selector(closeSettings)];
+    self.tableView.separatorColor = [UIColor colorWithRed:0.35 green:0 blue:0 alpha:1];
+    self.tableView.keyboardDismissMode = UIScrollViewKeyboardDismissModeOnDrag;
+
+    UINavigationBarAppearance *appearance = [[UINavigationBarAppearance alloc] init];
+    [appearance configureWithOpaqueBackground];
+    appearance.backgroundColor = UIColor.blackColor;
+    appearance.titleTextAttributes = @{NSForegroundColorAttributeName: P6YRed(), NSFontAttributeName: [UIFont systemFontOfSize:19 weight:UIFontWeightHeavy]};
+    self.navigationController.navigationBar.standardAppearance = appearance;
+    self.navigationController.navigationBar.scrollEdgeAppearance = appearance;
+    self.navigationController.navigationBar.tintColor = P6YRed();
+    self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithTitle:@"Done" style:UIBarButtonItemStyleDone target:self action:@selector(closeSettings)];
+
+    self.sections = @[
+        @{ @"title": @"DOWNLOADS", @"rows": @[
+            [self switchRow:@"Enable downloads" detail:@"Shows the P6YTOK media button" key:@"p6y_downloads_enabled"],
+            [self switchRow:@"Download videos" detail:@"Downloads the direct playback file without TikTok's watermark layer" key:@"p6y_download_video"],
+            [self switchRow:@"Download photo posts" detail:@"Saves every static photo in a post" key:@"p6y_download_photos"],
+            [self switchRow:@"Download music" detail:@"Exports the post audio through the share sheet" key:@"p6y_download_music"],
+            [self switchRow:@"Copy description" detail:@"Adds Copy Description to the P6YTOK menu" key:@"p6y_copy_description"],
+            [self switchRow:@"Copy video link" detail:@"Copies the direct video media link" key:@"p6y_copy_video_link"],
+            [self switchRow:@"Copy music link" detail:@"Copies the direct audio link" key:@"p6y_copy_music_link"],
+            [self switchRow:@"Download progress" detail:@"Shows a compact black-and-red progress bar" key:@"p6y_download_progress"],
+            [self segmentRow:@"After downloading" detail:@"Music always opens the share sheet" key:@"p6y_download_destination" options:@[@"Photos", @"Share"]]
+        ]},
+        @{ @"title": @"FEED", @"rows": @[
+            [self switchRow:@"Disable ads" detail:@"Filters ad and pseudo-ad feed models" key:@"p6y_hide_ads"],
+            [self switchRow:@"Pure Mode button" detail:@"Adds a button that hides or restores feed controls" key:@"p6y_pure_mode"],
+            [self switchRow:@"Transparent comments" detail:@"Uses a translucent comment panel" key:@"p6y_transparent_comments"],
+            [self switchRow:@"Clean shared links" detail:@"Removes TikTok tracking parameters from copied links" key:@"p6y_clean_links"],
+            [self switchRow:@"Disable content warnings" detail:@"Suppresses supported feed warning masks" key:@"p6y_disable_warnings"],
+            [self switchRow:@"Skip recommendations" detail:@"Filters user-recommendation cards" key:@"p6y_skip_recommendations"],
+            [self segmentRow:@"When a video ends" detail:@"Choose replay, stop, or move to the next post" key:@"p6y_playback_action" options:@[@"Replay", @"Stop", @"Next"]],
+            [self segmentRow:@"Startup page" detail:@"Select the first home feed tab" key:@"p6y_startup_page" options:@[@"For You", @"Following"]]
+        ]},
+        @{ @"title": @"PROFILE", @"rows": @[
+            [self switchRow:@"Save profile photo" detail:@"Long-press the profile-photo preview to save or share it" key:@"p6y_save_profile_photo"],
+            [self switchRow:@"Follow status" detail:@"Shows relationship status in a small P6YTOK profile badge" key:@"p6y_profile_follow_status"],
+            [self switchRow:@"Video count" detail:@"Shows the visible post count in the profile badge" key:@"p6y_profile_video_count"],
+            [self switchRow:@"Upload date" detail:@"Shows the date on profile thumbnails" key:@"p6y_profile_upload_date"],
+            [self switchRow:@"Like count" detail:@"Shows likes on profile thumbnails" key:@"p6y_profile_like_count"],
+            [self switchRow:@"Hide sensitive-content masks" detail:@"Removes supported profile thumbnail masks" key:@"p6y_profile_unsensitive"],
+            [self switchRow:@"Extend bio limit" detail:@"Raises the local editor limit to 222 characters" key:@"p6y_extend_bio"],
+            [self switchRow:@"Extend comment limit" detail:@"Raises the local editor limit to 240 characters" key:@"p6y_extend_comment"]
+        ]},
+        @{ @"title": @"CONFIRMATIONS", @"rows": @[
+            [self switchRow:@"Confirm likes" detail:@"Ask before liking a post" key:@"p6y_confirm_like"],
+            [self switchRow:@"Confirm comment likes" detail:@"Ask before liking a comment" key:@"p6y_confirm_comment_like"],
+            [self switchRow:@"Confirm comment dislikes" detail:@"Ask before disliking a comment" key:@"p6y_confirm_comment_dislike"],
+            [self switchRow:@"Confirm follows" detail:@"Ask before changing a follow relationship" key:@"p6y_confirm_follow"]
+        ]},
+        @{ @"title": @"SECURITY", @"rows": @[
+            [self switchRow:@"Lock P6YTOK" detail:@"Require Face ID, Touch ID, or the device passcode" key:@"p6y_app_lock"]
+        ]},
+        @{ @"title": @"ABOUT", @"rows": @[
+            @{ @"type": @"info", @"title": @"P6YTOK 0.1.0", @"detail": @"Revival baseline for TikTok 46.1.0" },
+            @{ @"type": @"info", @"title": @"Black + Red", @"detail": @"No legacy branding, donation links, fake stats, region spoofing, or broad bypass hooks" }
+        ]}
+    ];
 }
 
-- (UITableViewStyle)tableViewStyle {
-    return UITableViewStyleInsetGrouped;
+- (NSDictionary *)switchRow:(NSString *)title detail:(NSString *)detail key:(NSString *)key {
+    return @{ @"type": @"switch", @"title": title, @"detail": detail, @"key": key };
+}
+
+- (NSDictionary *)segmentRow:(NSString *)title detail:(NSString *)detail key:(NSString *)key options:(NSArray *)options {
+    return @{ @"type": @"segment", @"title": title, @"detail": detail, @"key": key, @"options": options };
 }
 
 - (void)closeSettings {
     [self dismissViewControllerAnimated:YES completion:nil];
 }
 
-- (PSSpecifier *)sectionWithTitle:(NSString *)title footer:(NSString *)footer {
-    PSSpecifier *section = [PSSpecifier preferenceSpecifierNamed:title
-                                                          target:self
-                                                             set:nil
-                                                             get:nil
-                                                          detail:nil
-                                                            cell:PSGroupCell
-                                                            edit:nil];
-    if (footer.length) {
-        [section setProperty:footer forKey:@"footerText"];
+- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
+    return self.sections.count;
+}
+
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
+    return [self.sections[section][@"rows"] count];
+}
+
+- (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
+    return self.sections[section][@"title"];
+}
+
+- (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
+    if (section == self.sections.count - 1) return @"P6YTOK settings apply immediately.";
+    return nil;
+}
+
+- (UIView *)tableView:(UITableView *)tableView viewForHeaderInSection:(NSInteger)section {
+    UILabel *label = [[UILabel alloc] init];
+    label.text = [NSString stringWithFormat:@"   %@", self.sections[section][@"title"]];
+    label.textColor = P6YRed();
+    label.font = [UIFont systemFontOfSize:13 weight:UIFontWeightHeavy];
+    return label;
+}
+
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+    NSDictionary *row = self.sections[indexPath.section][@"rows"][indexPath.row];
+    UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:nil];
+    cell.backgroundColor = [UIColor colorWithWhite:0.055 alpha:1];
+    cell.textLabel.text = row[@"title"];
+    cell.textLabel.textColor = UIColor.whiteColor;
+    cell.textLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
+    cell.detailTextLabel.text = row[@"detail"];
+    cell.detailTextLabel.textColor = [UIColor colorWithWhite:0.62 alpha:1];
+    cell.detailTextLabel.numberOfLines = 3;
+    cell.selectionStyle = UITableViewCellSelectionStyleNone;
+
+    NSString *type = row[@"type"];
+    NSString *key = row[@"key"];
+    if ([type isEqualToString:@"switch"]) {
+        UISwitch *control = [[UISwitch alloc] init];
+        control.onTintColor = P6YRed();
+        control.accessibilityIdentifier = key;
+        control.on = [P6YManager boolForKey:key];
+        [control addTarget:self action:@selector(switchChanged:) forControlEvents:UIControlEventValueChanged];
+        cell.accessoryView = control;
+    } else if ([type isEqualToString:@"segment"]) {
+        UISegmentedControl *control = [[UISegmentedControl alloc] initWithItems:row[@"options"]];
+        control.selectedSegmentIndex = [P6YManager integerForKey:key];
+        control.accessibilityIdentifier = key;
+        control.selectedSegmentTintColor = P6YRed();
+        [control setTitleTextAttributes:@{NSForegroundColorAttributeName: UIColor.whiteColor} forState:UIControlStateSelected];
+        [control setTitleTextAttributes:@{NSForegroundColorAttributeName: [UIColor colorWithWhite:0.75 alpha:1]} forState:UIControlStateNormal];
+        [control addTarget:self action:@selector(segmentChanged:) forControlEvents:UIControlEventValueChanged];
+        cell.accessoryView = control;
+    } else {
+        cell.imageView.image = [UIImage systemImageNamed:@"flame.fill"];
+        cell.imageView.tintColor = P6YRed();
     }
-    return section;
+    return cell;
 }
 
-- (PSSpecifier *)switchWithTitle:(NSString *)title
-                            key:(NSString *)key
-                   defaultValue:(BOOL)defaultValue {
-    PSSpecifier *specifier = [PSSpecifier preferenceSpecifierNamed:title
-                                                            target:self
-                                                               set:@selector(setPreferenceValue:specifier:)
-                                                               get:@selector(readPreferenceValue:)
-                                                            detail:nil
-                                                              cell:PSSwitchCell
-                                                              edit:nil];
-    [specifier setProperty:key forKey:@"key"];
-    [specifier setProperty:@(defaultValue) forKey:@"default"];
-    [specifier setProperty:NSBundle.mainBundle.bundleIdentifier forKey:@"defaults"];
-    [specifier setProperty:P6YTOKRedColor() forKey:@"tintColor"];
-    return specifier;
+- (void)switchChanged:(UISwitch *)sender {
+    if (sender.accessibilityIdentifier.length == 0) return;
+    [[NSUserDefaults standardUserDefaults] setBool:sender.isOn forKey:sender.accessibilityIdentifier];
 }
 
-- (NSArray *)specifiers {
-    if (_specifiers) return _specifiers;
-
-    NSMutableArray *items = [NSMutableArray array];
-
-    [items addObject:[self sectionWithTitle:@"Downloads"
-                                     footer:@"Download handling will be rebuilt for TikTok 46.1.0 in the next phase."]];
-    [items addObject:[self switchWithTitle:@"Download Videos" key:@"dw_videos" defaultValue:YES]];
-    [items addObject:[self switchWithTitle:@"Download Music" key:@"dw_musics" defaultValue:YES]];
-    [items addObject:[self switchWithTitle:@"Copy Video Description" key:@"copy_decription" defaultValue:YES]];
-    [items addObject:[self switchWithTitle:@"Copy Video Link" key:@"copy_video_link" defaultValue:YES]];
-    [items addObject:[self switchWithTitle:@"Copy Music Link" key:@"copy_music_link" defaultValue:YES]];
-
-    [items addObject:[self sectionWithTitle:@"Feed" footer:nil]];
-    [items addObject:[self switchWithTitle:@"Disable Ads" key:@"hide_ads" defaultValue:YES]];
-    [items addObject:[self switchWithTitle:@"Pure Mode" key:@"remove_elements_button" defaultValue:YES]];
-    [items addObject:[self switchWithTitle:@"Show Progress Bar" key:@"show_porgress_bar" defaultValue:YES]];
-
-    [items addObject:[self sectionWithTitle:@"Profile" footer:nil]];
-    [items addObject:[self switchWithTitle:@"Save Profile Picture" key:@"save_profile" defaultValue:YES]];
-    [items addObject:[self switchWithTitle:@"Copy Profile Information" key:@"copy_profile_information" defaultValue:YES]];
-    [items addObject:[self switchWithTitle:@"Extend Bio Limit" key:@"extended_bio" defaultValue:YES]];
-    [items addObject:[self switchWithTitle:@"Extend Comment Limit" key:@"extendedComment" defaultValue:YES]];
-
-    [items addObject:[self sectionWithTitle:@"Confirmations" footer:nil]];
-    [items addObject:[self switchWithTitle:@"Confirm Like" key:@"like_confirm" defaultValue:NO]];
-    [items addObject:[self switchWithTitle:@"Confirm Comment Like" key:@"like_comment_confirm" defaultValue:NO]];
-    [items addObject:[self switchWithTitle:@"Confirm Comment Dislike" key:@"dislike_comment_confirm" defaultValue:NO]];
-    [items addObject:[self switchWithTitle:@"Confirm Follow" key:@"follow_confirm" defaultValue:NO]];
-
-    [items addObject:[self sectionWithTitle:@"Security & Links"
-                                     footer:@"P6YTOK contains no fake-stat, region-spoofing, destructive interaction-reset, donation, or jailbreak-bypass options."]];
-    [items addObject:[self switchWithTitle:@"Open Links in Browser" key:@"openInBrowser" defaultValue:NO]];
-    [items addObject:[self switchWithTitle:@"Passcode Lock" key:@"padlock" defaultValue:NO]];
-
-    _specifiers = [items copy];
-    return _specifiers;
-}
-
-- (id)readPreferenceValue:(PSSpecifier *)specifier {
-    NSString *key = [specifier propertyForKey:@"key"];
-    id value = [NSUserDefaults.standardUserDefaults objectForKey:key];
-    return value ?: [specifier propertyForKey:@"default"];
-}
-
-- (void)setPreferenceValue:(id)value specifier:(PSSpecifier *)specifier {
-    NSString *key = [specifier propertyForKey:@"key"];
-    if (!key.length) return;
-
-    [NSUserDefaults.standardUserDefaults setObject:value forKey:key];
-    [NSUserDefaults.standardUserDefaults synchronize];
+- (void)segmentChanged:(UISegmentedControl *)sender {
+    if (sender.accessibilityIdentifier.length == 0) return;
+    [[NSUserDefaults standardUserDefaults] setInteger:sender.selectedSegmentIndex forKey:sender.accessibilityIdentifier];
 }
 
 @end
