@@ -1,13 +1,267 @@
 name: Build P6YTOK IPA
 
 on:
+  push:
+    branches:
+      - revive-tiktok-46.1.0
+    paths-ignore:
+      - .github/last-build-result.txt
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: p6ytok-ipa-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  paused:
-    runs-on: ubuntu-latest
+  build:
+    name: Build tweak and package IPA
+    runs-on: macos-14
+    timeout-minutes: 45
+    env:
+      THEOS: ${{ github.workspace }}/theos
+
     steps:
-      - run: echo "IPA build is temporarily paused while the final source type errors are repaired."
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Audit Logos source
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          required = [
+              "Tweak.x", "P6YMediaQuality.x", "P6YLiveZoom.x", "P6YFollowerTracker.x",
+              "P6YStoryTimer.m", "P6YLikesCleanup.m", "P6YManager.m",
+              "P6YDownloadManager.m", "P6YDownloadManager+FullQuality.m",
+              "SettingsViewController.m"
+          ]
+          for name in required:
+              if not Path(name).exists():
+                  raise SystemExit(f"Missing source file: {name}")
+
+          for source in Path(".").glob("*.x"):
+              text = source.read_text(encoding="utf-8")
+              if text.count("%hook") != text.count("%end"):
+                  raise SystemExit(f"Unbalanced %hook/%end in {source}")
+              if "{ %orig;" in text or "%orig; return;" in text:
+                  raise SystemExit(f"Inline %orig control flow remains in {source}")
+              cursor = 0
+              while True:
+                  start = text.find("%hook", cursor)
+                  if start < 0:
+                      break
+                  end = text.find("%end", start)
+                  if end < 0:
+                      raise SystemExit(f"Hook without %end in {source}")
+                  if "^{" in text[start:end]:
+                      raise SystemExit(f"Block literal remains inside a Logos hook in {source}")
+                  cursor = end + 4
+
+          tweak = Path("Tweak.x").read_text(encoding="utf-8")
+          if tweak.count("static void P6YConfirmVoidAction") != 1:
+              raise SystemExit("Invalid P6YConfirmVoidAction helper count")
+          if tweak.count("static void P6YConfirmObjectAction") != 1:
+              raise SystemExit("Invalid P6YConfirmObjectAction helper count")
+          if "self.view" in tweak[tweak.index("%hook TTKCommentPanelViewController"):tweak.index("%end", tweak.index("%hook TTKCommentPanelViewController"))]:
+              raise SystemExit("Forward-class self.view access remains")
+          print("Logos source audit passed")
+          PY
+
+      - name: Resolve base IPA from Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          RELEASES="$RUNNER_TEMP/releases.json"
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" > "$RELEASES"
+          IPA_URL="$(python3 - "$RELEASES" <<'PY'
+          import json
+          import sys
+
+          raw = json.load(open(sys.argv[1], encoding="utf-8"))
+          releases = raw if isinstance(raw, list) else [raw]
+          candidates = []
+          for release in releases:
+              if release.get("draft"):
+                  continue
+              for asset in release.get("assets", []):
+                  name = str(asset.get("name", ""))
+                  lower = name.lower()
+                  if not lower.endswith(".ipa"):
+                      continue
+                  if any(token in lower for token in ("p6ytok", "patched", "injected")):
+                      continue
+                  candidates.append(asset)
+          if not candidates:
+              raise SystemExit("No usable base IPA release asset found")
+          preferred = [asset for asset in candidates if any(
+              token in str(asset.get("name", "")).lower()
+              for token in ("46.1.0", "461034", "tiktok")
+          )]
+          print((preferred or candidates)[0]["browser_download_url"])
+          PY
+          )"
+          echo "IPA_URL=$IPA_URL" >> "$GITHUB_ENV"
+
+      - name: Install build tools
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+        run: |
+          brew install make ldid dpkg coreutils gnu-sed findutils >/dev/null
+          echo "$(brew --prefix make)/libexec/gnubin" >> "$GITHUB_PATH"
+          echo "$(brew --prefix coreutils)/libexec/gnubin" >> "$GITHUB_PATH"
+          echo "$(brew --prefix gnu-sed)/libexec/gnubin" >> "$GITHUB_PATH"
+          echo "$(brew --prefix findutils)/libexec/gnubin" >> "$GITHUB_PATH"
+
+      - name: Install Theos
+        run: git clone -q --depth 1 --recurse-submodules --shallow-submodules https://github.com/theos/theos.git "$THEOS"
+
+      - name: Build P6YTOK serially
+        run: |
+          set -euo pipefail
+          rm -rf packages .theos artifacts
+          mkdir -p artifacts
+          make -j1 clean package FINALPACKAGE=1 2>&1 | tee artifacts/build.log
+          DEB="$(find packages -type f -name '*.deb' -print | sort | tail -n 1)"
+          test -n "$DEB"
+          cp "$DEB" artifacts/P6YTOK_0.1.6_iphoneos-arm.deb
+          echo "DEB_PATH=$GITHUB_WORKSPACE/artifacts/P6YTOK_0.1.6_iphoneos-arm.deb" >> "$GITHUB_ENV"
+
+      - name: Upload compiler log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: P6YTOK-build-log
+          path: artifacts/build.log
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload tweak package
+        uses: actions/upload-artifact@v4
+        with:
+          name: P6YTOK-deb
+          path: artifacts/P6YTOK_0.1.6_iphoneos-arm.deb
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Download and validate TikTok IPA
+        run: |
+          set -euo pipefail
+          BASE_IPA="$RUNNER_TEMP/TikTok_46.1.0_decrypted.ipa"
+          curl --fail --location --retry 3 --retry-delay 3 "$IPA_URL" --output "$BASE_IPA"
+          unzip -tq "$BASE_IPA"
+          CHECK_DIR="$RUNNER_TEMP/ipa-check"
+          rm -rf "$CHECK_DIR"
+          mkdir -p "$CHECK_DIR"
+          unzip -q "$BASE_IPA" -d "$CHECK_DIR"
+          APP_DIR="$(find "$CHECK_DIR/Payload" -maxdepth 1 -type d -name '*.app' -print | head -n 1)"
+          test -n "$APP_DIR"
+          VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_DIR/Info.plist")"
+          BUILD="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_DIR/Info.plist")"
+          BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_DIR/Info.plist")"
+          if [[ "$VERSION" != "46.1.0" || "$BUILD" != "461034" || "$BUNDLE_ID" != "com.zhiliaoapp.musically" ]]; then
+            echo "Expected TikTok 46.1.0 (461034), com.zhiliaoapp.musically; received $VERSION ($BUILD), $BUNDLE_ID" >&2
+            exit 1
+          fi
+          echo "BASE_IPA=$BASE_IPA" >> "$GITHUB_ENV"
+
+      - name: Install Azule
+        run: |
+          set -euo pipefail
+          AZULE_DIR="$RUNNER_TEMP/Azule"
+          git clone -q --depth 1 https://github.com/mpelteshki/Azule.git "$AZULE_DIR"
+          chmod +x "$AZULE_DIR/azule"
+          echo "AZULE_DIR=$AZULE_DIR" >> "$GITHUB_ENV"
+
+      - name: Inject tweak and create IPA
+        run: |
+          set -euo pipefail
+          OUTPUT_DIR="$RUNNER_TEMP/p6ytok-output"
+          mkdir -p "$OUTPUT_DIR"
+          "$AZULE_DIR/azule" -i "$BASE_IPA" -o "$OUTPUT_DIR" -f "$DEB_PATH"
+          BUILT_IPA="$(find "$OUTPUT_DIR" -type f -name '*.ipa' -print | sort | tail -n 1)"
+          test -n "$BUILT_IPA"
+          cp "$BUILT_IPA" artifacts/P6YTOK_TikTok_46.1.0.ipa
+
+      - name: Upload P6YTOK IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: P6YTOK-TikTok-46.1.0-IPA
+          path: artifacts/P6YTOK_TikTok_46.1.0.ipa
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Publish build result
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILD_STATUS: ${{ job.status }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          HEAD_SHA: ${{ github.sha }}
+          BRANCH_NAME: ${{ github.ref_name }}
+        run: |
+          python3 <<'PY'
+          import base64
+          import json
+          import os
+          import pathlib
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+
+          log = pathlib.Path("artifacts/build.log")
+          lines = log.read_text(errors="replace").splitlines() if log.exists() else []
+          error_lines = []
+          for index, line in enumerate(lines):
+              lowered = line.lower()
+              if " error:" in lowered or "fatal error:" in lowered or "undefined symbols" in lowered:
+                  error_lines.extend(lines[max(0, index - 3):min(len(lines), index + 10)])
+                  error_lines.append("---")
+          if not error_lines and lines:
+              error_lines = lines[-100:]
+          error_lines = error_lines[:180]
+
+          report = "\n".join([
+              f"Status: {os.environ['BUILD_STATUS']}",
+              f"Run: {os.environ['RUN_URL']}",
+              f"Source commit: {os.environ['HEAD_SHA']}",
+              "",
+              "Relevant output:",
+              *(error_lines or ["No compiler log was created."]),
+              "",
+          ])
+
+          api = os.environ["GITHUB_API_URL"]
+          repo = os.environ["GITHUB_REPOSITORY"]
+          branch = os.environ["BRANCH_NAME"]
+          path = ".github/last-build-result.txt"
+          url = f"{api}/repos/{repo}/contents/{path}"
+          headers = {
+              "Accept": "application/vnd.github+json",
+              "Authorization": f"Bearer {os.environ['GH_TOKEN']}",
+              "X-GitHub-Api-Version": "2022-11-28",
+              "Content-Type": "application/json",
+          }
+          sha = None
+          try:
+              request = urllib.request.Request(f"{url}?ref={urllib.parse.quote(branch)}", headers=headers)
+              with urllib.request.urlopen(request) as response:
+                  sha = json.load(response).get("sha")
+          except urllib.error.HTTPError as error:
+              if error.code != 404:
+                  raise
+          payload = {
+              "message": "Record latest P6YTOK build result [skip ci]",
+              "branch": branch,
+              "content": base64.b64encode(report.encode()).decode(),
+          }
+          if sha:
+              payload["sha"] = sha
+          request = urllib.request.Request(url, data=json.dumps(payload).encode(), headers=headers, method="PUT")
+          with urllib.request.urlopen(request) as response:
+              json.load(response)
+          PY
