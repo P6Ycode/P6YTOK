@@ -1,0 +1,170 @@
+name: Harden Logos confirmation hooks
+
+on:
+  push:
+    branches:
+      - revive-tiktok-46.1.0
+    paths:
+      - .github/workflows/fix-logos-orig-calls.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix-hooks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: revive-tiktok-46.1.0
+          fetch-depth: 0
+
+      - name: Rewrite confirmation hooks
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          path = Path("Tweak.x")
+          text = path.read_text(encoding="utf-8")
+
+          replacements = {
+          '''%hook AWECommentPanelBaseCell
+          - (void)onLikeAction:(id)sender {
+              if (![P6YManager boolForKey:@"p6y_confirm_comment_like"]) { %orig; return; }
+              if ([objc_getAssociatedObject(self, P6YCommentLikeBypassKey) boolValue]) {
+                  objc_setAssociatedObject(self, P6YCommentLikeBypassKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                  %orig;
+                  return;
+              }
+              P6YConfirmObjectAction(self, sender, P6YCommentLikeBypassKey, @selector(onLikeAction:), @"Like this comment?");
+          }
+          - (void)onDislikeAction:(id)sender {
+              if (![P6YManager boolForKey:@"p6y_confirm_comment_dislike"]) { %orig; return; }
+              if ([objc_getAssociatedObject(self, P6YCommentDislikeBypassKey) boolValue]) {
+                  objc_setAssociatedObject(self, P6YCommentDislikeBypassKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                  %orig;
+                  return;
+              }
+              P6YConfirmObjectAction(self, sender, P6YCommentDislikeBypassKey, @selector(onDislikeAction:), @"Dislike this comment?");
+          }
+          %end
+          ''': '''%hook AWECommentPanelBaseCell
+          - (void)onLikeAction:(id)sender {
+              if (![P6YManager boolForKey:@"p6y_confirm_comment_like"]) {
+                  %orig(sender);
+                  return;
+              }
+              if ([objc_getAssociatedObject(self, P6YCommentLikeBypassKey) boolValue]) {
+                  objc_setAssociatedObject(self, P6YCommentLikeBypassKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                  %orig(sender);
+                  return;
+              }
+              P6YConfirmObjectAction(self, sender, P6YCommentLikeBypassKey, @selector(onLikeAction:), @"Like this comment?");
+          }
+
+          - (void)onDislikeAction:(id)sender {
+              if (![P6YManager boolForKey:@"p6y_confirm_comment_dislike"]) {
+                  %orig(sender);
+                  return;
+              }
+              if ([objc_getAssociatedObject(self, P6YCommentDislikeBypassKey) boolValue]) {
+                  objc_setAssociatedObject(self, P6YCommentDislikeBypassKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                  %orig(sender);
+                  return;
+              }
+              P6YConfirmObjectAction(self, sender, P6YCommentDislikeBypassKey, @selector(onDislikeAction:), @"Dislike this comment?");
+          }
+          %end
+          ''',
+          '''%hook _TtC17TikTokCommentImpl18TTKCommentItemView
+          - (void)onLikeTapped {
+              if (![P6YManager boolForKey:@"p6y_confirm_comment_like"]) { %orig; return; }
+              if ([objc_getAssociatedObject(self, P6YCommentLikeBypassKey) boolValue]) {
+                  objc_setAssociatedObject(self, P6YCommentLikeBypassKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                  %orig;
+                  return;
+              }
+              P6YConfirmVoidAction(self, P6YCommentLikeBypassKey, @selector(onLikeTapped), @"Like this comment?");
+          }
+          - (void)onDislikeTapped {
+              if (![P6YManager boolForKey:@"p6y_confirm_comment_dislike"]) { %orig; return; }
+              if ([objc_getAssociatedObject(self, P6YCommentDislikeBypassKey) boolValue]) {
+                  objc_setAssociatedObject(self, P6YCommentDislikeBypassKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                  %orig;
+                  return;
+              }
+              P6YConfirmVoidAction(self, P6YCommentDislikeBypassKey, @selector(onDislikeTapped), @"Dislike this comment?");
+          }
+          %end
+          ''': '''%hook _TtC17TikTokCommentImpl18TTKCommentItemView
+          - (void)onLikeTapped {
+              if (![P6YManager boolForKey:@"p6y_confirm_comment_like"]) {
+                  %orig;
+                  return;
+              }
+              if ([objc_getAssociatedObject(self, P6YCommentLikeBypassKey) boolValue]) {
+                  objc_setAssociatedObject(self, P6YCommentLikeBypassKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                  %orig;
+                  return;
+              }
+              P6YConfirmVoidAction(self, P6YCommentLikeBypassKey, @selector(onLikeTapped), @"Like this comment?");
+          }
+
+          - (void)onDislikeTapped {
+              if (![P6YManager boolForKey:@"p6y_confirm_comment_dislike"]) {
+                  %orig;
+                  return;
+              }
+              if ([objc_getAssociatedObject(self, P6YCommentDislikeBypassKey) boolValue]) {
+                  objc_setAssociatedObject(self, P6YCommentDislikeBypassKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                  %orig;
+                  return;
+              }
+              P6YConfirmVoidAction(self, P6YCommentDislikeBypassKey, @selector(onDislikeTapped), @"Dislike this comment?");
+          }
+          %end
+          ''',
+          '''%hook TTKRelationButtonViewModelV2
+          - (void)onRelationViewTapped {
+              if (![P6YManager boolForKey:@"p6y_confirm_follow"]) { %orig; return; }
+              if ([objc_getAssociatedObject(self, P6YFollowBypassKey) boolValue]) {
+                  objc_setAssociatedObject(self, P6YFollowBypassKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                  %orig;
+                  return;
+              }
+              P6YConfirmVoidAction(self, P6YFollowBypassKey, @selector(onRelationViewTapped), @"Change this follow relationship?");
+          }
+          %end
+          ''': '''%hook TTKRelationButtonViewModelV2
+          - (void)onRelationViewTapped {
+              if (![P6YManager boolForKey:@"p6y_confirm_follow"]) {
+                  %orig;
+                  return;
+              }
+              if ([objc_getAssociatedObject(self, P6YFollowBypassKey) boolValue]) {
+                  objc_setAssociatedObject(self, P6YFollowBypassKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                  %orig;
+                  return;
+              }
+              P6YConfirmVoidAction(self, P6YFollowBypassKey, @selector(onRelationViewTapped), @"Change this follow relationship?");
+          }
+          %end
+          '''
+          }
+
+          for old, new in replacements.items():
+              if old not in text:
+                  raise SystemExit("Expected confirmation hook source was not found")
+              text = text.replace(old, new, 1)
+
+          path.write_text(text, encoding="utf-8")
+          Path(".github/workflows/fix-logos-orig-calls.yml").unlink()
+          PY
+
+      - name: Commit hardened hooks
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Tweak.x .github/workflows/fix-logos-orig-calls.yml
+          git commit -m "Harden Logos confirmation orig calls"
+          git push origin HEAD:revive-tiktok-46.1.0
