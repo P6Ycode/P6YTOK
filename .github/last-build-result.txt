@@ -1,16 +1,16 @@
-Status: failure
-Run: https://github.com/P6Ycode/P6YTOK/actions/runs/30046160501
-Source commit: 37db035e0183e110949e703cded4ae5add02c088
+Status: cancelled
+Run: https://github.com/P6Ycode/P6YTOK/actions/runs/30046305444
+Source commit: 7da7e0ffa044ddc2c8d2480561a38719da372259
 
 Relevant output:
 [0;1;32m            ^
-[0m[1mTweak.x:664:191: [0m[0;1;31merror: [0m[1mfunction definition is not allowed here[0m
+[0m[1mTweak.x:684:191: [0m[0;1;31merror: [0m[1mfunction definition is not allowed here[0m
 static void _logos_method$_ungrouped$AWECommentPanelBaseCell$onDislikeAction$(_LOGOS_SELF_TYPE_NORMAL AWECommentPanelBaseCell* _LOGOS_SELF_CONST __unused self, SEL __unused _cmd, id sender) {
 [0;1;32m                                                                                                                                                                                              ^
-[0m[1mTweak.x:842:2: [0m[0;1;31merror: [0m[1mexpected '}'[0m
+[0m[1mTweak.x:862:2: [0m[0;1;31merror: [0m[1mexpected '}'[0m
 }
 [0;1;32m ^
-[0m[1mTweak.x:655:188: [0m[0;1;30mnote: [0mto match this '{'[0m
+[0m[1mTweak.x:675:188: [0m[0;1;30mnote: [0mto match this '{'[0m
 static void _logos_method$_ungrouped$AWECommentPanelBaseCell$onLikeAction$(_LOGOS_SELF_TYPE_NORMAL AWECommentPanelBaseCell* _LOGOS_SELF_CONST __unused self, SEL __unused _cmd, id sender) {
 [0;1;32m                                                                                                                                                                                           ^
 [0m4 errors generated.
@@ -18,7 +18,7 @@ make[3]: *** [/Users/runner/work/P6YTOK/P6YTOK/theos/makefiles/instance/rules.mk
 make[3]: *** Waiting for unfinished jobs....
 [0;32m==> [1;39mCompiling P6YDownloadManager+FullQuality.m (arm64)…[m
 ---
-[0m[1mTweak.x:655:188: [0m[0;1;30mnote: [0mto match this '{'[0m
+[0m[1mTweak.x:675:188: [0m[0;1;30mnote: [0mto match this '{'[0m
 static void _logos_method$_ungrouped$AWECommentPanelBaseCell$onLikeAction$(_LOGOS_SELF_TYPE_NORMAL AWECommentPanelBaseCell* _LOGOS_SELF_CONST __unused self, SEL __unused _cmd, id sender) {
 [0;1;32m                                                                                                                                                                                           ^
 [0m4 errors generated.
