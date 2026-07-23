@@ -71,11 +71,8 @@ static UIColor *P6YRed(void) {
             [self switchRow:@"Confirm comment dislikes" detail:@"Ask before disliking a comment" key:@"p6y_confirm_comment_dislike"],
             [self switchRow:@"Confirm follows" detail:@"Ask before changing a follow relationship" key:@"p6y_confirm_follow"]
         ]},
-        @{ @"title": @"SECURITY", @"rows": @[
-            [self switchRow:@"Lock P6YTOK" detail:@"Require Face ID, Touch ID, or the device passcode" key:@"p6y_app_lock"]
-        ]},
         @{ @"title": @"ABOUT", @"rows": @[
-            @{ @"type": @"info", @"title": @"P6YTOK 0.1.1", @"detail": @"Full-quality download pass for TikTok 46.1.0" },
+            @{ @"type": @"info", @"title": @"P6YTOK 0.1.2", @"detail": @"Full-quality downloads with the app lock removed for TikTok 46.1.0" },
             @{ @"type": @"info", @"title": @"Quality behavior", @"detail": @"Uses the largest/original media variant TikTok exposes and writes original files to Photos without re-encoding" }
         ]}
     ];
