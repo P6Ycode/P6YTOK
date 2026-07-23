@@ -1,34 +1,40 @@
 # P6YTOK
 
-P6YTOK is a clean revival of the former TikTok tweak codebase for TikTok 46.1.0 and iOS 15 or newer.
+P6YTOK is a black-and-red TikTok enhancement project being revived for TikTok 46.1.0 (build 461034).
 
-## Current revival status
+## Current revival scope
 
-Phase 1 is focused on removing obsolete or risky behavior before the modern feature implementations are rebuilt.
-
-### Removed
-
-- Fake verification badge
-- Fake follower and following counts
-- Region and carrier spoofing
-- Destructive interaction-reset tools
-- Broad jailbreak and sideload detection overrides
-- Unverified watermark override
-- Legacy donation and developer links
-- Former project branding and package identity
-
-### Safe core retained
-
-- P6YTOK settings entry
-- Disable ads
-- TikTok progress bar override
+- Video, photo-post, music, and profile-photo downloads
+- Save to Photos or open the share sheet
+- Direct media-link and description copying
+- Feed ad filtering
+- Pure Mode
+- Download progress overlay
 - Like, comment, and follow confirmations
-- Extended bio and comment limits
-- Passcode lock
-- Open links in the external browser
+- Passcode / biometric app lock
+- Profile follow status, video count, upload date, like count, and sensitive-mask options
+- Feed comment transparency, cleaned links, warning suppression, recommendation filtering, playback behavior, and startup-page selection
+- New P6YTOK settings page with black-and-red styling
 
-### Next
+## Removed from the old project
 
-The downloader, photo saving, music saving, sharing, copy actions, Pure Mode, profile tools, and modern progress UI will be rebuilt for TikTok 46.1.0.
+- Fake verification and fake account statistics
+- Region changing
+- Destructive “Fix Interactions” behavior
+- Broad jailbreak, receipt, and sideload bypass hooks
+- Legacy watermark toggle
+- Donation links and old branding
+- “Remove Just Watched” — TikTok's Just Watched label is left unchanged
+- Always Upload in HD
+- Upload-country display and country flag/code placement
+- Pull-to-refresh disabling
+- Username replacement
+- LIVE filtering
 
-See `REVIVAL_AUDIT.md` for compatibility details.
+## Target
+
+- TikTok 46.1.0
+- iOS 15 or newer
+- arm64
+
+The branch is under active runtime testing. Internal TikTok classes can change between app builds, so each feature should be tested against the target decrypted IPA before release.
