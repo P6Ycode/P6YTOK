@@ -594,6 +594,26 @@ static void P6YConfirmObjectAction(id object, id argument, const void *bypassKey
     }];
 }
 
+static void P6YConfirmVoidAction(id object, const void *bypassKey, SEL selector, NSString *message) {
+    __weak id weakObject = object;
+    [P6YManager presentConfirmationWithTitle:@"P6YTOK" message:message from:nil confirmed:^{
+        id strongObject = weakObject;
+        if (!strongObject) return;
+        objc_setAssociatedObject(strongObject, bypassKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        ((void (*)(id, SEL))objc_msgSend)(strongObject, selector);
+    }];
+}
+
+static void P6YConfirmObjectAction(id object, id argument, const void *bypassKey, SEL selector, NSString *message) {
+    __weak id weakObject = object;
+    [P6YManager presentConfirmationWithTitle:@"P6YTOK" message:message from:nil confirmed:^{
+        id strongObject = weakObject;
+        if (!strongObject) return;
+        objc_setAssociatedObject(strongObject, bypassKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        ((void (*)(id, SEL, id))objc_msgSend)(strongObject, selector, argument);
+    }];
+}
+
 %hook AWEFeedVideoButton
 - (void)_onTouchUpInside {
     NSString *imageName = [[P6YGet(self, @"imageNameString") description] lowercaseString];
