@@ -55,6 +55,9 @@ static UIColor *P6YRed(void) {
             [self segmentRow:@"When a video ends" detail:@"Choose replay, stop, or move to the next post" key:@"p6y_playback_action" options:@[@"Replay", @"Stop", @"Next"]],
             [self segmentRow:@"Startup page" detail:@"Select the first home feed tab" key:@"p6y_startup_page" options:@[@"For You", @"Following"]]
         ]},
+        @{ @"title": @"LIVE", @"rows": @[
+            [self switchRow:@"Pinch to zoom" detail:@"Clear the LIVE controls, then pinch anywhere to zoom from 1× to 4×. Two-finger double-tap resets." key:@"p6y_live_zoom"]
+        ]},
         @{ @"title": @"PROFILE", @"rows": @[
             [self switchRow:@"Save profile photo" detail:@"Long-press the profile-photo preview to fetch the highest-quality available avatar" key:@"p6y_save_profile_photo"],
             [self switchRow:@"Follow status" detail:@"Shows relationship status in a small P6YTOK profile badge" key:@"p6y_profile_follow_status"],
@@ -72,7 +75,7 @@ static UIColor *P6YRed(void) {
             [self switchRow:@"Confirm follows" detail:@"Ask before changing a follow relationship" key:@"p6y_confirm_follow"]
         ]},
         @{ @"title": @"ABOUT", @"rows": @[
-            @{ @"type": @"info", @"title": @"P6YTOK 0.1.2", @"detail": @"Full-quality downloads with the app lock removed for TikTok 46.1.0" },
+            @{ @"type": @"info", @"title": @"P6YTOK 0.1.3", @"detail": @"Full-quality downloads, no app lock, and LIVE clear-mode zoom for TikTok 46.1.0" },
             @{ @"type": @"info", @"title": @"Quality behavior", @"detail": @"Uses the largest/original media variant TikTok exposes and writes original files to Photos without re-encoding" }
         ]}
     ];
