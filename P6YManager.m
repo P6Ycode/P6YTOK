@@ -36,12 +36,15 @@
         @"p6y_confirm_comment_like": @NO,
         @"p6y_confirm_comment_dislike": @NO,
         @"p6y_confirm_follow": @NO,
-        @"p6y_app_lock": @NO,
     };
-    [NSUserDefaults.standardUserDefaults registerDefaults:defaults];
+
+    NSUserDefaults *store = NSUserDefaults.standardUserDefaults;
+    [store removeObjectForKey:@"p6y_app_lock"];
+    [store registerDefaults:defaults];
 }
 
 + (BOOL)boolForKey:(NSString *)key {
+    if ([key isEqualToString:@"p6y_app_lock"]) return NO;
     return [NSUserDefaults.standardUserDefaults boolForKey:key];
 }
 
@@ -140,9 +143,9 @@
 }
 
 + (void)presentConfirmationWithTitle:(NSString *)title
-                              message:(NSString *)message
-                                 from:(UIViewController *)controller
-                            confirmed:(dispatch_block_t)confirmed {
+                               message:(NSString *)message
+                                  from:(UIViewController *)controller
+                             confirmed:(dispatch_block_t)confirmed {
     dispatch_async(dispatch_get_main_queue(), ^{
         UIViewController *presenter = controller ?: [self topViewController];
         if (!presenter) return;
