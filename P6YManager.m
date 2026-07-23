@@ -44,13 +44,10 @@
         @"p6y_confirm_follow": @NO,
     };
 
-    NSUserDefaults *store = NSUserDefaults.standardUserDefaults;
-    [store removeObjectForKey:@"p6y_app_lock"];
-    [store registerDefaults:defaults];
+    [NSUserDefaults.standardUserDefaults registerDefaults:defaults];
 }
 
 + (BOOL)boolForKey:(NSString *)key {
-    if ([key isEqualToString:@"p6y_app_lock"]) return NO;
     return [NSUserDefaults.standardUserDefaults boolForKey:key];
 }
 
