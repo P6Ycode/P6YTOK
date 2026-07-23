@@ -1,6 +1,6 @@
-TARGET := iphone:clang:latest:13.0
-INSTALL_TARGET_PROCESSES = SpringBoard
-
+TARGET := iphone:clang:latest:15.0
+ARCHS = arm64
+INSTALL_TARGET_PROCESSES = TikTok
 
 include $(THEOS)/makefiles/common.mk
 
