@@ -6,15 +6,16 @@ on:
       - revive-tiktok-46.1.0
     paths-ignore:
       - .github/last-build-result.txt
+      - .github/workflows/repair-final.yml
   workflow_dispatch:
     inputs:
       ipa_url:
-        description: Optional direct decrypted TikTok 46.1.0 IPA URL; otherwise a matching IPA release asset is used
+        description: Optional direct decrypted TikTok 46.1.0 IPA URL; otherwise a matching repository release asset is used
         required: false
         type: string
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: p6ytok-ipa-${{ github.ref }}
@@ -33,188 +34,28 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
 
-      - name: Normalize Logos confirmation hooks
-        run: |
-          python3 <<'PY'
-          from pathlib import Path
-
-          path = Path("Tweak.x")
-          text = path.read_text(encoding="utf-8")
-          start_marker = "%hook AWEFeedVideoButton"
-          end_marker = "%hook AWETextInputController"
-          start = text.index(start_marker)
-          end = text.index(end_marker, start)
-
-          replacement = r'''static void P6YConfirmVoidAction(id object, const void *bypassKey, SEL selector, NSString *message) {
-              __weak id weakObject = object;
-              [P6YManager presentConfirmationWithTitle:@"P6YTOK" message:message from:nil confirmed:^{
-                  id strongObject = weakObject;
-                  if (!strongObject) return;
-                  objc_setAssociatedObject(strongObject, bypassKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-                  ((void (*)(id, SEL))objc_msgSend)(strongObject, selector);
-              }];
-          }
-
-          static void P6YConfirmObjectAction(id object, id argument, const void *bypassKey, SEL selector, NSString *message) {
-              __weak id weakObject = object;
-              [P6YManager presentConfirmationWithTitle:@"P6YTOK" message:message from:nil confirmed:^{
-                  id strongObject = weakObject;
-                  if (!strongObject) return;
-                  objc_setAssociatedObject(strongObject, bypassKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-                  ((void (*)(id, SEL, id))objc_msgSend)(strongObject, selector, argument);
-              }];
-          }
-
-          %hook AWEFeedVideoButton
-          - (void)_onTouchUpInside {
-              NSString *imageName = [[P6YGet(self, @"imageNameString") description] lowercaseString];
-              BOOL isLikeButton = [imageName containsString:@"like"] || [imageName containsString:@"digg"];
-              if (![P6YManager boolForKey:@"p6y_confirm_like"] || !isLikeButton) {
-                  %orig;
-                  return;
-              }
-              if ([objc_getAssociatedObject(self, P6YLikeBypassKey) boolValue]) {
-                  objc_setAssociatedObject(self, P6YLikeBypassKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-                  %orig;
-                  return;
-              }
-              P6YConfirmVoidAction(self, P6YLikeBypassKey, @selector(_onTouchUpInside), @"Like this post?");
-          }
-          %end
-
-          %hook AWECommentPanelBaseCell
-          - (void)onLikeAction:(id)sender {
-              if (![P6YManager boolForKey:@"p6y_confirm_comment_like"]) { %orig; return; }
-              if ([objc_getAssociatedObject(self, P6YCommentLikeBypassKey) boolValue]) {
-                  objc_setAssociatedObject(self, P6YCommentLikeBypassKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-                  %orig;
-                  return;
-              }
-              P6YConfirmObjectAction(self, sender, P6YCommentLikeBypassKey, @selector(onLikeAction:), @"Like this comment?");
-          }
-          - (void)onDislikeAction:(id)sender {
-              if (![P6YManager boolForKey:@"p6y_confirm_comment_dislike"]) { %orig; return; }
-              if ([objc_getAssociatedObject(self, P6YCommentDislikeBypassKey) boolValue]) {
-                  objc_setAssociatedObject(self, P6YCommentDislikeBypassKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-                  %orig;
-                  return;
-              }
-              P6YConfirmObjectAction(self, sender, P6YCommentDislikeBypassKey, @selector(onDislikeAction:), @"Dislike this comment?");
-          }
-          %end
-
-          %hook _TtC17TikTokCommentImpl18TTKCommentItemView
-          - (void)onLikeTapped {
-              if (![P6YManager boolForKey:@"p6y_confirm_comment_like"]) { %orig; return; }
-              if ([objc_getAssociatedObject(self, P6YCommentLikeBypassKey) boolValue]) {
-                  objc_setAssociatedObject(self, P6YCommentLikeBypassKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-                  %orig;
-                  return;
-              }
-              P6YConfirmVoidAction(self, P6YCommentLikeBypassKey, @selector(onLikeTapped), @"Like this comment?");
-          }
-          - (void)onDislikeTapped {
-              if (![P6YManager boolForKey:@"p6y_confirm_comment_dislike"]) { %orig; return; }
-              if ([objc_getAssociatedObject(self, P6YCommentDislikeBypassKey) boolValue]) {
-                  objc_setAssociatedObject(self, P6YCommentDislikeBypassKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-                  %orig;
-                  return;
-              }
-              P6YConfirmVoidAction(self, P6YCommentDislikeBypassKey, @selector(onDislikeTapped), @"Dislike this comment?");
-          }
-          %end
-
-          %hook TTKRelationButtonViewModelV2
-          - (void)onRelationViewTapped {
-              if (![P6YManager boolForKey:@"p6y_confirm_follow"]) { %orig; return; }
-              if ([objc_getAssociatedObject(self, P6YFollowBypassKey) boolValue]) {
-                  objc_setAssociatedObject(self, P6YFollowBypassKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-                  %orig;
-                  return;
-              }
-              P6YConfirmVoidAction(self, P6YFollowBypassKey, @selector(onRelationViewTapped), @"Change this follow relationship?");
-          }
-          %end
-
-          '''
-
-          updated = text[:start] + replacement + text[end:]
-          path.write_text(updated, encoding="utf-8")
-          PY
-
-      - name: Persist Logos source fix
-        env:
-          GH_TOKEN: ${{ github.token }}
-          BRANCH_NAME: ${{ github.ref_name }}
-        run: |
-          if git diff --quiet -- Tweak.x; then
-            exit 0
-          fi
-          python3 <<'PY'
-          import base64
-          import json
-          import os
-          import pathlib
-          import urllib.parse
-          import urllib.request
-
-          api = os.environ["GITHUB_API_URL"]
-          repo = os.environ["GITHUB_REPOSITORY"]
-          branch = os.environ["BRANCH_NAME"]
-          path = "Tweak.x"
-          url = f"{api}/repos/{repo}/contents/{path}"
-          headers = {
-              "Accept": "application/vnd.github+json",
-              "Authorization": f"Bearer {os.environ['GH_TOKEN']}",
-              "X-GitHub-Api-Version": "2022-11-28",
-              "Content-Type": "application/json",
-          }
-          request = urllib.request.Request(
-              f"{url}?ref={urllib.parse.quote(branch)}", headers=headers
-          )
-          with urllib.request.urlopen(request) as response:
-              current = json.load(response)
-          payload = {
-              "message": "Fix Logos confirmation hook generation [skip ci]",
-              "branch": branch,
-              "sha": current["sha"],
-              "content": base64.b64encode(pathlib.Path(path).read_bytes()).decode(),
-          }
-          request = urllib.request.Request(
-              url,
-              data=json.dumps(payload).encode(),
-              headers=headers,
-              method="PUT",
-          )
-          with urllib.request.urlopen(request) as response:
-              json.load(response)
-          PY
-
       - name: Resolve base IPA
-        id: ipa_input
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if [[ -n "${IPA_URL:-}" ]]; then
-            SOURCE_DESCRIPTION="URL input or secret"
-          else
-            RELEASE_JSON="$RUNNER_TEMP/releases.json"
+          if [[ -z "${IPA_URL:-}" ]]; then
+            RELEASES="$RUNNER_TEMP/releases.json"
             curl --fail --silent --show-error --location \
               -H "Accept: application/vnd.github+json" \
               -H "Authorization: Bearer $GH_TOKEN" \
               -H "X-GitHub-Api-Version: 2022-11-28" \
               "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/releases?per_page=20" \
-              --output "$RELEASE_JSON"
-            IPA_URL="$(python3 - "$RELEASE_JSON" <<'PY'
+              --output "$RELEASES"
+            IPA_URL="$(python3 - "$RELEASES" <<'PY'
           import json
           import sys
 
-          with open(sys.argv[1], "r", encoding="utf-8") as handle:
+          with open(sys.argv[1], encoding="utf-8") as handle:
               releases = json.load(handle)
 
-          assets = []
+          candidates = []
           for release in releases:
               if release.get("draft"):
                   continue
@@ -223,28 +64,22 @@ jobs:
                   lower = name.lower()
                   if not lower.endswith(".ipa"):
                       continue
-                  if any(token in lower for token in ("p6ytok", "patched", "injected")):
+                  if any(word in lower for word in ("p6ytok", "patched", "injected")):
                       continue
-                  assets.append(asset)
+                  candidates.append(asset)
 
-          if not assets:
-              raise SystemExit("No usable base .ipa asset was found in the repository releases")
+          if not candidates:
+              raise SystemExit("No usable base IPA release asset found")
 
-          preferred = [
-              asset for asset in assets
-              if "46.1.0" in str(asset.get("name", ""))
-              or "461034" in str(asset.get("name", ""))
-              or "tiktok" in str(asset.get("name", "")).lower()
-          ]
-          selected = (preferred or assets)[0]
-          print(selected["browser_download_url"])
+          preferred = [asset for asset in candidates if any(
+              token in str(asset.get("name", "")).lower()
+              for token in ("46.1.0", "461034", "tiktok")
+          )]
+          print((preferred or candidates)[0]["browser_download_url"])
           PY
             )"
-            echo "IPA_URL=$IPA_URL" >> "$GITHUB_ENV"
-            SOURCE_DESCRIPTION="repository release asset"
           fi
-          echo "source=$SOURCE_DESCRIPTION" >> "$GITHUB_OUTPUT"
-          echo "Base IPA source: $SOURCE_DESCRIPTION" >> "$GITHUB_STEP_SUMMARY"
+          echo "IPA_URL=$IPA_URL" >> "$GITHUB_ENV"
 
       - name: Install build tools
         env:
@@ -257,18 +92,17 @@ jobs:
           echo "$(brew --prefix findutils)/libexec/gnubin" >> "$GITHUB_PATH"
 
       - name: Install Theos
-        run: |
-          git clone -q --depth 1 --recurse-submodules --shallow-submodules https://github.com/theos/theos.git "$THEOS"
+        run: git clone -q --depth 1 --recurse-submodules --shallow-submodules https://github.com/theos/theos.git "$THEOS"
 
       - name: Build P6YTOK package
         run: |
           set -euo pipefail
           rm -rf packages .theos artifacts
-          mkdir -p "$GITHUB_WORKSPACE/artifacts"
-          make clean package FINALPACKAGE=1 2>&1 | tee "$GITHUB_WORKSPACE/artifacts/build.log"
-          DEB="$(find "$GITHUB_WORKSPACE/packages" -type f -name '*.deb' -print | sort | tail -n 1)"
+          mkdir -p artifacts
+          make clean package FINALPACKAGE=1 2>&1 | tee artifacts/build.log
+          DEB="$(find packages -type f -name '*.deb' -print | sort | tail -n 1)"
           test -n "$DEB"
-          cp "$DEB" "$GITHUB_WORKSPACE/artifacts/P6YTOK_0.1.6_iphoneos-arm.deb"
+          cp "$DEB" artifacts/P6YTOK_0.1.6_iphoneos-arm.deb
           echo "DEB_PATH=$GITHUB_WORKSPACE/artifacts/P6YTOK_0.1.6_iphoneos-arm.deb" >> "$GITHUB_ENV"
 
       - name: Upload build log
@@ -310,7 +144,6 @@ jobs:
 
       - name: Install Azule injector
         run: |
-          set -euo pipefail
           AZULE_DIR="$RUNNER_TEMP/Azule"
           git clone -q --depth 1 https://github.com/mpelteshki/Azule.git "$AZULE_DIR"
           chmod +x "$AZULE_DIR/azule"
@@ -324,12 +157,7 @@ jobs:
           "$AZULE_DIR/azule" -i "$BASE_IPA" -o "$OUTPUT_DIR" -f "$DEB_PATH"
           BUILT_IPA="$(find "$OUTPUT_DIR" -type f -name '*.ipa' -print | sort | tail -n 1)"
           test -n "$BUILT_IPA"
-          cp "$BUILT_IPA" "$GITHUB_WORKSPACE/artifacts/P6YTOK_TikTok_46.1.0.ipa"
-          {
-            echo "## IPA built"
-            echo
-            echo "Artifact: \`P6YTOK_TikTok_46.1.0.ipa\`"
-          } >> "$GITHUB_STEP_SUMMARY"
+          cp "$BUILT_IPA" artifacts/P6YTOK_TikTok_46.1.0.ipa
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
@@ -339,85 +167,3 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
-
-      - name: Publish concise build result
-        if: always()
-        env:
-          GH_TOKEN: ${{ github.token }}
-          BUILD_STATUS: ${{ job.status }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          HEAD_SHA: ${{ github.sha }}
-          BRANCH_NAME: ${{ github.ref_name }}
-        run: |
-          python3 <<'PY'
-          import base64
-          import json
-          import os
-          import pathlib
-          import urllib.error
-          import urllib.parse
-          import urllib.request
-
-          log_path = pathlib.Path("artifacts/build.log")
-          lines = log_path.read_text(errors="replace").splitlines() if log_path.exists() else []
-          interesting = []
-          markers = (" error:", "fatal error:", "undefined symbols", "make[", "expected '")
-          indexes = [i for i, line in enumerate(lines) if any(marker in line.lower() for marker in markers)]
-          for index in indexes[:8]:
-              start = max(0, index - 4)
-              end = min(len(lines), index + 10)
-              interesting.extend(lines[start:end])
-              interesting.append("---")
-          if not interesting and lines:
-              interesting = lines[-80:]
-          if len(interesting) > 160:
-              interesting = interesting[:160]
-
-          report = "\n".join([
-              f"Status: {os.environ['BUILD_STATUS']}",
-              f"Run: {os.environ['RUN_URL']}",
-              f"Source commit: {os.environ['HEAD_SHA']}",
-              "",
-              "Relevant output:",
-              *(interesting or ["No build log was created."]),
-              "",
-          ])
-
-          api = os.environ["GITHUB_API_URL"]
-          repo = os.environ["GITHUB_REPOSITORY"]
-          branch = os.environ["BRANCH_NAME"]
-          path = ".github/last-build-result.txt"
-          url = f"{api}/repos/{repo}/contents/{path}"
-          headers = {
-              "Accept": "application/vnd.github+json",
-              "Authorization": f"Bearer {os.environ['GH_TOKEN']}",
-              "X-GitHub-Api-Version": "2022-11-28",
-              "Content-Type": "application/json",
-          }
-          sha = None
-          try:
-              request = urllib.request.Request(
-                  f"{url}?ref={urllib.parse.quote(branch)}", headers=headers
-              )
-              with urllib.request.urlopen(request) as response:
-                  sha = json.load(response).get("sha")
-          except urllib.error.HTTPError as error:
-              if error.code != 404:
-                  raise
-
-          payload = {
-              "message": "Record latest P6YTOK build result [skip ci]",
-              "branch": branch,
-              "content": base64.b64encode(report.encode()).decode(),
-          }
-          if sha:
-              payload["sha"] = sha
-          request = urllib.request.Request(
-              url,
-              data=json.dumps(payload).encode(),
-              headers=headers,
-              method="PUT",
-          )
-          with urllib.request.urlopen(request) as response:
-              json.load(response)
-          PY
