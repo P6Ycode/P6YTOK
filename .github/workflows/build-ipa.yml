@@ -1,13 +1,6 @@
 name: Build P6YTOK IPA
 
 on:
-  push:
-    branches:
-      - revive-tiktok-46.1.0
-    paths-ignore:
-      - .github/last-build-result.txt
-      - .github/workflows/repair-final.yml
-      - .github/workflows/add-build-result-publisher.yml
   workflow_dispatch:
     inputs:
       ipa_url:
@@ -16,7 +9,7 @@ on:
         type: string
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: p6ytok-ipa-${{ github.ref }}
@@ -34,115 +27,6 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
-
-      - name: Prepare compatible Logos source
-        run: |
-          python3 <<'PY'
-          from pathlib import Path
-
-          path = Path("Tweak.x")
-          text = path.read_text(encoding="utf-8")
-          start = text.index("static void P6YConfirmVoidAction")
-          end = text.index("%hook AWETextInputController", start)
-          replacement = r'''static void P6YConfirmVoidAction(id object, const void *bypassKey, SEL selector, NSString *message) {
-              __weak id weakObject = object;
-              [P6YManager presentConfirmationWithTitle:@"P6YTOK" message:message from:nil confirmed:^{
-                  id strongObject = weakObject;
-                  if (!strongObject) return;
-                  objc_setAssociatedObject(strongObject, bypassKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-                  ((void (*)(id, SEL))objc_msgSend)(strongObject, selector);
-              }];
-          }
-
-          static void P6YConfirmObjectAction(id object, id argument, const void *bypassKey, SEL selector, NSString *message) {
-              __weak id weakObject = object;
-              [P6YManager presentConfirmationWithTitle:@"P6YTOK" message:message from:nil confirmed:^{
-                  id strongObject = weakObject;
-                  if (!strongObject) return;
-                  objc_setAssociatedObject(strongObject, bypassKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-                  ((void (*)(id, SEL, id))objc_msgSend)(strongObject, selector, argument);
-              }];
-          }
-
-          %hook AWEFeedVideoButton
-          - (void)_onTouchUpInside {
-              NSString *imageName = [[P6YGet(self, @"imageNameString") description] lowercaseString];
-              BOOL isLikeButton = [imageName containsString:@"like"] || [imageName containsString:@"digg"];
-              BOOL enabled = [P6YManager boolForKey:@"p6y_confirm_like"] && isLikeButton;
-              BOOL bypass = [objc_getAssociatedObject(self, P6YLikeBypassKey) boolValue];
-              if (enabled && !bypass) {
-                  P6YConfirmVoidAction(self, P6YLikeBypassKey, @selector(_onTouchUpInside), @"Like this post?");
-                  return;
-              }
-              if (bypass) objc_setAssociatedObject(self, P6YLikeBypassKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-              %orig;
-          }
-          %end
-
-          %hook AWECommentPanelBaseCell
-          - (void)onLikeAction:(id)sender {
-              BOOL enabled = [P6YManager boolForKey:@"p6y_confirm_comment_like"];
-              BOOL bypass = [objc_getAssociatedObject(self, P6YCommentLikeBypassKey) boolValue];
-              if (enabled && !bypass) {
-                  P6YConfirmObjectAction(self, sender, P6YCommentLikeBypassKey, @selector(onLikeAction:), @"Like this comment?");
-                  return;
-              }
-              if (bypass) objc_setAssociatedObject(self, P6YCommentLikeBypassKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-              %orig(sender);
-          }
-
-          - (void)onDislikeAction:(id)sender {
-              BOOL enabled = [P6YManager boolForKey:@"p6y_confirm_comment_dislike"];
-              BOOL bypass = [objc_getAssociatedObject(self, P6YCommentDislikeBypassKey) boolValue];
-              if (enabled && !bypass) {
-                  P6YConfirmObjectAction(self, sender, P6YCommentDislikeBypassKey, @selector(onDislikeAction:), @"Dislike this comment?");
-                  return;
-              }
-              if (bypass) objc_setAssociatedObject(self, P6YCommentDislikeBypassKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-              %orig(sender);
-          }
-          %end
-
-          %hook _TtC17TikTokCommentImpl18TTKCommentItemView
-          - (void)onLikeTapped {
-              BOOL enabled = [P6YManager boolForKey:@"p6y_confirm_comment_like"];
-              BOOL bypass = [objc_getAssociatedObject(self, P6YCommentLikeBypassKey) boolValue];
-              if (enabled && !bypass) {
-                  P6YConfirmVoidAction(self, P6YCommentLikeBypassKey, @selector(onLikeTapped), @"Like this comment?");
-                  return;
-              }
-              if (bypass) objc_setAssociatedObject(self, P6YCommentLikeBypassKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-              %orig;
-          }
-
-          - (void)onDislikeTapped {
-              BOOL enabled = [P6YManager boolForKey:@"p6y_confirm_comment_dislike"];
-              BOOL bypass = [objc_getAssociatedObject(self, P6YCommentDislikeBypassKey) boolValue];
-              if (enabled && !bypass) {
-                  P6YConfirmVoidAction(self, P6YCommentDislikeBypassKey, @selector(onDislikeTapped), @"Dislike this comment?");
-                  return;
-              }
-              if (bypass) objc_setAssociatedObject(self, P6YCommentDislikeBypassKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-              %orig;
-          }
-          %end
-
-          %hook TTKRelationButtonViewModelV2
-          - (void)onRelationViewTapped {
-              BOOL enabled = [P6YManager boolForKey:@"p6y_confirm_follow"];
-              BOOL bypass = [objc_getAssociatedObject(self, P6YFollowBypassKey) boolValue];
-              if (enabled && !bypass) {
-                  P6YConfirmVoidAction(self, P6YFollowBypassKey, @selector(onRelationViewTapped), @"Change this follow relationship?");
-                  return;
-              }
-              if (bypass) objc_setAssociatedObject(self, P6YFollowBypassKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-              %orig;
-          }
-          %end
-
-          '''
-          path.write_text(text[:start] + replacement + text[end:], encoding="utf-8")
-          PY
 
       - name: Resolve base IPA
         shell: bash
@@ -277,75 +161,3 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
-
-      - name: Publish concise build result
-        if: always()
-        env:
-          GH_TOKEN: ${{ github.token }}
-          BUILD_STATUS: ${{ job.status }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          HEAD_SHA: ${{ github.sha }}
-          BRANCH_NAME: ${{ github.ref_name }}
-        run: |
-          python3 <<'PYRESULT'
-          import base64
-          import json
-          import os
-          import pathlib
-          import urllib.error
-          import urllib.parse
-          import urllib.request
-
-          log_path = pathlib.Path("artifacts/build.log")
-          lines = log_path.read_text(errors="replace").splitlines() if log_path.exists() else []
-          markers = (" error:", "fatal error:", "undefined symbols", "make[", "expected '", "no usable base", "curl:")
-          indexes = [i for i, line in enumerate(lines) if any(marker in line.lower() for marker in markers)]
-          relevant = []
-          for index in indexes[:10]:
-              relevant.extend(lines[max(0, index - 4):min(len(lines), index + 12)])
-              relevant.append("---")
-          if not relevant and lines:
-              relevant = lines[-100:]
-          relevant = relevant[:180]
-
-          report = "\n".join([
-              f"Status: {os.environ['BUILD_STATUS']}",
-              f"Run: {os.environ['RUN_URL']}",
-              f"Source commit: {os.environ['HEAD_SHA']}",
-              "",
-              "Relevant output:",
-              *(relevant or ["No build log was created."]),
-              "",
-          ])
-
-          api = os.environ["GITHUB_API_URL"]
-          repo = os.environ["GITHUB_REPOSITORY"]
-          branch = os.environ["BRANCH_NAME"]
-          path = ".github/last-build-result.txt"
-          url = f"{api}/repos/{repo}/contents/{path}"
-          headers = {
-              "Accept": "application/vnd.github+json",
-              "Authorization": f"Bearer {os.environ['GH_TOKEN']}",
-              "X-GitHub-Api-Version": "2022-11-28",
-              "Content-Type": "application/json",
-          }
-          sha = None
-          try:
-              request = urllib.request.Request(f"{url}?ref={urllib.parse.quote(branch)}", headers=headers)
-              with urllib.request.urlopen(request) as response:
-                  sha = json.load(response).get("sha")
-          except urllib.error.HTTPError as error:
-              if error.code != 404:
-                  raise
-
-          payload = {
-              "message": "Record latest P6YTOK build result [skip ci]",
-              "branch": branch,
-              "content": base64.b64encode(report.encode()).decode(),
-          }
-          if sha:
-              payload["sha"] = sha
-          request = urllib.request.Request(url, data=json.dumps(payload).encode(), headers=headers, method="PUT")
-          with urllib.request.urlopen(request) as response:
-              json.load(response)
-          PYRESULT
