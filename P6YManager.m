@@ -22,6 +22,8 @@
         @"p6y_skip_recommendations": @NO,
         @"p6y_playback_action": @0,
         @"p6y_startup_page": @0,
+        @"p6y_live_zoom": @YES,
+        @"p6y_story_time": @YES,
 
         @"p6y_save_profile_photo": @YES,
         @"p6y_profile_follow_status": @NO,
@@ -29,32 +31,36 @@
         @"p6y_profile_upload_date": @NO,
         @"p6y_profile_like_count": @NO,
         @"p6y_profile_unsensitive": @NO,
+        @"p6y_profile_follower_history": @YES,
         @"p6y_extend_bio": @NO,
         @"p6y_extend_comment": @NO,
+
+        @"p6y_liked_post_tools": @YES,
 
         @"p6y_confirm_like": @NO,
         @"p6y_confirm_comment_like": @NO,
         @"p6y_confirm_comment_dislike": @NO,
         @"p6y_confirm_follow": @NO,
-        @"p6y_app_lock": @NO,
     };
-    [[NSUserDefaults standardUserDefaults] registerDefaults:defaults];
+    NSUserDefaults *userDefaults = NSUserDefaults.standardUserDefaults;
+    [userDefaults registerDefaults:defaults];
+    // The biometric/passcode lock was removed. Clearing the old key also
+    // prevents a previous test build from presenting the retired lock screen.
+    [userDefaults removeObjectForKey:@"p6y_app_lock"];
 }
 
 + (BOOL)boolForKey:(NSString *)key {
-    return [[NSUserDefaults standardUserDefaults] boolForKey:key];
+    return [NSUserDefaults.standardUserDefaults boolForKey:key];
 }
 
 + (NSInteger)integerForKey:(NSString *)key {
-    return [[NSUserDefaults standardUserDefaults] integerForKey:key];
+    return [NSUserDefaults.standardUserDefaults integerForKey:key];
 }
 
 + (UIViewController *)topViewController {
     UIWindow *window = nil;
-    for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
-        if (scene.activationState != UISceneActivationStateForegroundActive || ![scene isKindOfClass:[UIWindowScene class]]) {
-            continue;
-        }
+    for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
+        if (scene.activationState != UISceneActivationStateForegroundActive || ![scene isKindOfClass:UIWindowScene.class]) continue;
         for (UIWindow *candidate in ((UIWindowScene *)scene).windows) {
             if (candidate.isKeyWindow) {
                 window = candidate;
@@ -63,14 +69,14 @@
         }
         if (window) break;
     }
-    if (!window) window = [UIApplication sharedApplication].windows.firstObject;
+    if (!window) window = UIApplication.sharedApplication.windows.firstObject;
 
     UIViewController *controller = window.rootViewController;
     while (controller.presentedViewController) controller = controller.presentedViewController;
-    if ([controller isKindOfClass:[UINavigationController class]]) {
+    if ([controller isKindOfClass:UINavigationController.class]) {
         controller = ((UINavigationController *)controller).visibleViewController ?: controller;
     }
-    if ([controller isKindOfClass:[UITabBarController class]]) {
+    if ([controller isKindOfClass:UITabBarController.class]) {
         controller = ((UITabBarController *)controller).selectedViewController ?: controller;
     }
     return controller;
@@ -89,9 +95,7 @@
     if (string.length == 0) return string;
     NSURLComponents *components = [NSURLComponents componentsWithString:string];
     NSString *host = components.host.lowercaseString;
-    if (!components || (![host containsString:@"tiktok.com"] && ![host containsString:@"musical.ly"])) {
-        return string;
-    }
+    if (!components || (![host containsString:@"tiktok.com"] && ![host containsString:@"musical.ly"])) return string;
 
     NSSet<NSString *> *trackingKeys = [NSSet setWithArray:@[
         @"_r", @"_t", @"share_app_id", @"share_iid", @"share_link_id",
@@ -120,7 +124,7 @@
         label.backgroundColor = [UIColor colorWithWhite:0.03 alpha:0.94];
         label.font = [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
         label.textAlignment = NSTextAlignmentCenter;
-        label.numberOfLines = 2;
+        label.numberOfLines = 3;
         label.layer.cornerRadius = 12;
         label.layer.borderWidth = 1;
         label.layer.borderColor = [UIColor colorWithRed:0.9 green:0 blue:0 alpha:1].CGColor;
@@ -130,11 +134,11 @@
         [NSLayoutConstraint activateConstraints:@[
             [label.centerXAnchor constraintEqualToAnchor:host.centerXAnchor],
             [label.bottomAnchor constraintEqualToAnchor:host.safeAreaLayoutGuide.bottomAnchor constant:-24],
-            [label.widthAnchor constraintLessThanOrEqualToAnchor:host.widthAnchor multiplier:0.82],
+            [label.widthAnchor constraintLessThanOrEqualToAnchor:host.widthAnchor multiplier:0.86],
             [label.heightAnchor constraintGreaterThanOrEqualToConstant:44]
         ]];
         [UIView animateWithDuration:0.2 animations:^{ label.alpha = 1; } completion:^(__unused BOOL finished) {
-            [UIView animateWithDuration:0.25 delay:1.5 options:UIViewAnimationOptionCurveEaseInOut animations:^{
+            [UIView animateWithDuration:0.25 delay:1.8 options:UIViewAnimationOptionCurveEaseInOut animations:^{
                 label.alpha = 0;
             } completion:^(__unused BOOL finished2) {
                 [label removeFromSuperview];
@@ -144,9 +148,9 @@
 }
 
 + (void)presentConfirmationWithTitle:(NSString *)title
-                             message:(NSString *)message
-                                from:(UIViewController *)controller
-                           confirmed:(dispatch_block_t)confirmed {
+                              message:(NSString *)message
+                                 from:(UIViewController *)controller
+                            confirmed:(dispatch_block_t)confirmed {
     dispatch_async(dispatch_get_main_queue(), ^{
         UIViewController *presenter = controller ?: [self topViewController];
         if (!presenter) return;
@@ -162,8 +166,8 @@
 
 + (void)cleanTemporaryDownloads {
     NSURL *directory = [NSURL fileURLWithPath:[NSTemporaryDirectory() stringByAppendingPathComponent:@"P6YTOK"] isDirectory:YES];
-    [[NSFileManager defaultManager] removeItemAtURL:directory error:nil];
-    [[NSFileManager defaultManager] createDirectoryAtURL:directory withIntermediateDirectories:YES attributes:nil error:nil];
+    [NSFileManager.defaultManager removeItemAtURL:directory error:nil];
+    [NSFileManager.defaultManager createDirectoryAtURL:directory withIntermediateDirectories:YES attributes:nil error:nil];
 }
 
 @end
