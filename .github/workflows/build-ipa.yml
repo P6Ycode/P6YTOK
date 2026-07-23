@@ -1,6 +1,11 @@
 name: Build P6YTOK IPA
 
 on:
+  push:
+    branches:
+      - revive-tiktok-46.1.0
+    paths-ignore:
+      - .github/last-build-result.txt
   workflow_dispatch:
 
 permissions:
