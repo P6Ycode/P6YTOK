@@ -22,8 +22,6 @@
         @"p6y_skip_recommendations": @NO,
         @"p6y_playback_action": @0,
         @"p6y_startup_page": @0,
-        @"p6y_live_zoom": @YES,
-        @"p6y_story_time": @YES,
 
         @"p6y_save_profile_photo": @YES,
         @"p6y_profile_follow_status": @NO,
@@ -31,22 +29,16 @@
         @"p6y_profile_upload_date": @NO,
         @"p6y_profile_like_count": @NO,
         @"p6y_profile_unsensitive": @NO,
-        @"p6y_profile_follower_history": @YES,
         @"p6y_extend_bio": @NO,
         @"p6y_extend_comment": @NO,
-
-        @"p6y_liked_post_tools": @YES,
 
         @"p6y_confirm_like": @NO,
         @"p6y_confirm_comment_like": @NO,
         @"p6y_confirm_comment_dislike": @NO,
         @"p6y_confirm_follow": @NO,
+        @"p6y_app_lock": @NO,
     };
-    NSUserDefaults *userDefaults = NSUserDefaults.standardUserDefaults;
-    [userDefaults registerDefaults:defaults];
-    // The biometric/passcode lock was removed. Clearing the old key also
-    // prevents a previous test build from presenting the retired lock screen.
-    [userDefaults removeObjectForKey:@"p6y_app_lock"];
+    [NSUserDefaults.standardUserDefaults registerDefaults:defaults];
 }
 
 + (BOOL)boolForKey:(NSString *)key {
