@@ -33,6 +33,163 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
 
+      - name: Normalize Logos confirmation hooks
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          path = Path("Tweak.x")
+          text = path.read_text(encoding="utf-8")
+          start_marker = "%hook AWEFeedVideoButton"
+          end_marker = "%hook AWETextInputController"
+          start = text.index(start_marker)
+          end = text.index(end_marker, start)
+
+          replacement = r'''static void P6YConfirmVoidAction(id object, const void *bypassKey, SEL selector, NSString *message) {
+              __weak id weakObject = object;
+              [P6YManager presentConfirmationWithTitle:@"P6YTOK" message:message from:nil confirmed:^{
+                  id strongObject = weakObject;
+                  if (!strongObject) return;
+                  objc_setAssociatedObject(strongObject, bypassKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                  ((void (*)(id, SEL))objc_msgSend)(strongObject, selector);
+              }];
+          }
+
+          static void P6YConfirmObjectAction(id object, id argument, const void *bypassKey, SEL selector, NSString *message) {
+              __weak id weakObject = object;
+              [P6YManager presentConfirmationWithTitle:@"P6YTOK" message:message from:nil confirmed:^{
+                  id strongObject = weakObject;
+                  if (!strongObject) return;
+                  objc_setAssociatedObject(strongObject, bypassKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                  ((void (*)(id, SEL, id))objc_msgSend)(strongObject, selector, argument);
+              }];
+          }
+
+          %hook AWEFeedVideoButton
+          - (void)_onTouchUpInside {
+              NSString *imageName = [[P6YGet(self, @"imageNameString") description] lowercaseString];
+              BOOL isLikeButton = [imageName containsString:@"like"] || [imageName containsString:@"digg"];
+              if (![P6YManager boolForKey:@"p6y_confirm_like"] || !isLikeButton) {
+                  %orig;
+                  return;
+              }
+              if ([objc_getAssociatedObject(self, P6YLikeBypassKey) boolValue]) {
+                  objc_setAssociatedObject(self, P6YLikeBypassKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                  %orig;
+                  return;
+              }
+              P6YConfirmVoidAction(self, P6YLikeBypassKey, @selector(_onTouchUpInside), @"Like this post?");
+          }
+          %end
+
+          %hook AWECommentPanelBaseCell
+          - (void)onLikeAction:(id)sender {
+              if (![P6YManager boolForKey:@"p6y_confirm_comment_like"]) { %orig; return; }
+              if ([objc_getAssociatedObject(self, P6YCommentLikeBypassKey) boolValue]) {
+                  objc_setAssociatedObject(self, P6YCommentLikeBypassKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                  %orig;
+                  return;
+              }
+              P6YConfirmObjectAction(self, sender, P6YCommentLikeBypassKey, @selector(onLikeAction:), @"Like this comment?");
+          }
+          - (void)onDislikeAction:(id)sender {
+              if (![P6YManager boolForKey:@"p6y_confirm_comment_dislike"]) { %orig; return; }
+              if ([objc_getAssociatedObject(self, P6YCommentDislikeBypassKey) boolValue]) {
+                  objc_setAssociatedObject(self, P6YCommentDislikeBypassKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                  %orig;
+                  return;
+              }
+              P6YConfirmObjectAction(self, sender, P6YCommentDislikeBypassKey, @selector(onDislikeAction:), @"Dislike this comment?");
+          }
+          %end
+
+          %hook _TtC17TikTokCommentImpl18TTKCommentItemView
+          - (void)onLikeTapped {
+              if (![P6YManager boolForKey:@"p6y_confirm_comment_like"]) { %orig; return; }
+              if ([objc_getAssociatedObject(self, P6YCommentLikeBypassKey) boolValue]) {
+                  objc_setAssociatedObject(self, P6YCommentLikeBypassKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                  %orig;
+                  return;
+              }
+              P6YConfirmVoidAction(self, P6YCommentLikeBypassKey, @selector(onLikeTapped), @"Like this comment?");
+          }
+          - (void)onDislikeTapped {
+              if (![P6YManager boolForKey:@"p6y_confirm_comment_dislike"]) { %orig; return; }
+              if ([objc_getAssociatedObject(self, P6YCommentDislikeBypassKey) boolValue]) {
+                  objc_setAssociatedObject(self, P6YCommentDislikeBypassKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                  %orig;
+                  return;
+              }
+              P6YConfirmVoidAction(self, P6YCommentDislikeBypassKey, @selector(onDislikeTapped), @"Dislike this comment?");
+          }
+          %end
+
+          %hook TTKRelationButtonViewModelV2
+          - (void)onRelationViewTapped {
+              if (![P6YManager boolForKey:@"p6y_confirm_follow"]) { %orig; return; }
+              if ([objc_getAssociatedObject(self, P6YFollowBypassKey) boolValue]) {
+                  objc_setAssociatedObject(self, P6YFollowBypassKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                  %orig;
+                  return;
+              }
+              P6YConfirmVoidAction(self, P6YFollowBypassKey, @selector(onRelationViewTapped), @"Change this follow relationship?");
+          }
+          %end
+
+          '''
+
+          updated = text[:start] + replacement + text[end:]
+          path.write_text(updated, encoding="utf-8")
+          PY
+
+      - name: Persist Logos source fix
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH_NAME: ${{ github.ref_name }}
+        run: |
+          if git diff --quiet -- Tweak.x; then
+            exit 0
+          fi
+          python3 <<'PY'
+          import base64
+          import json
+          import os
+          import pathlib
+          import urllib.parse
+          import urllib.request
+
+          api = os.environ["GITHUB_API_URL"]
+          repo = os.environ["GITHUB_REPOSITORY"]
+          branch = os.environ["BRANCH_NAME"]
+          path = "Tweak.x"
+          url = f"{api}/repos/{repo}/contents/{path}"
+          headers = {
+              "Accept": "application/vnd.github+json",
+              "Authorization": f"Bearer {os.environ['GH_TOKEN']}",
+              "X-GitHub-Api-Version": "2022-11-28",
+              "Content-Type": "application/json",
+          }
+          request = urllib.request.Request(
+              f"{url}?ref={urllib.parse.quote(branch)}", headers=headers
+          )
+          with urllib.request.urlopen(request) as response:
+              current = json.load(response)
+          payload = {
+              "message": "Fix Logos confirmation hook generation [skip ci]",
+              "branch": branch,
+              "sha": current["sha"],
+              "content": base64.b64encode(pathlib.Path(path).read_bytes()).decode(),
+          }
+          request = urllib.request.Request(
+              url,
+              data=json.dumps(payload).encode(),
+              headers=headers,
+              method="PUT",
+          )
+          with urllib.request.urlopen(request) as response:
+              json.load(response)
+          PY
+
       - name: Resolve base IPA
         id: ipa_input
         shell: bash
