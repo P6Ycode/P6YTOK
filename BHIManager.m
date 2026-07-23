@@ -1,149 +1,76 @@
 #import "BHIManager.h"
-#import "TikTokHeaders.h"
 
 @implementation BHIManager
-+ (BOOL)hideAds {
-    return [[NSUserDefaults standardUserDefaults] boolForKey:@"hide_ads"];
-}
-+ (BOOL)downloadVideos {
-    return [[NSUserDefaults standardUserDefaults] boolForKey:@"dw_videos"];
-}
-+ (BOOL)downloadMusics {
-    return [[NSUserDefaults standardUserDefaults] boolForKey:@"dw_musics"];
-}
-+ (BOOL)hideElementButton {
-    return [[NSUserDefaults standardUserDefaults] boolForKey:@"remove_elements_button"];
-}
-+ (BOOL)copyVideoDecription {
-    return [[NSUserDefaults standardUserDefaults] boolForKey:@"copy_decription"];
-}
-+ (BOOL)copyMusicLink {
-    return [[NSUserDefaults standardUserDefaults] boolForKey:@"copy_music_link"];
-}
-+ (BOOL)copyVideoLink {
-    return [[NSUserDefaults standardUserDefaults] boolForKey:@"copy_video_link"];
-}
-+ (BOOL)autoPlay {
-    return [[NSUserDefaults standardUserDefaults] boolForKey:@"auto_play"];
-}
-+ (BOOL)progressBar {
-    return [[NSUserDefaults standardUserDefaults] boolForKey:@"show_porgress_bar"];
-}
-+ (BOOL)likeConfirmation {
-    return [[NSUserDefaults standardUserDefaults] boolForKey:@"like_confirm"];
-}
-+ (BOOL)likeCommentConfirmation {
-    return [[NSUserDefaults standardUserDefaults] boolForKey:@"like_comment_confirm"];
-}
-+ (BOOL)dislikeCommentConfirmation {
-    return [[NSUserDefaults standardUserDefaults] boolForKey:@"dislike_comment_confirm"];
-}
-+ (BOOL)followConfirmation {
-    return [[NSUserDefaults standardUserDefaults] boolForKey:@"follow_confirm"];
-}
-+ (BOOL)profileSave {
-    return [[NSUserDefaults standardUserDefaults] boolForKey:@"save_profile"];
-}
-+ (BOOL)profileCopy {
-    return [[NSUserDefaults standardUserDefaults] boolForKey:@"copy_profile_information"];
-}
-+ (BOOL)alwaysOpenSafari {
-    return [[NSUserDefaults standardUserDefaults] boolForKey:@"openInBrowser"];
-}
-+ (BOOL)regionChangingEnabled {
-    return [[NSUserDefaults standardUserDefaults] boolForKey:@"en_region"];
-}
-+ (NSDictionary *)selectedRegion {
-    return [[NSUserDefaults standardUserDefaults] dictionaryForKey:@"region"];
-}
-+ (BOOL)fakeChangesEnabled {
-    return [[NSUserDefaults standardUserDefaults] boolForKey:@"en_fake"];
-}
-+ (BOOL)fakeVerified {
-    return [[NSUserDefaults standardUserDefaults] boolForKey:@"fake_verify"];
-}
-+ (BOOL)extendedBio {
-    return [[NSUserDefaults standardUserDefaults] boolForKey:@"extended_bio"];
-}
-+ (BOOL)extendedComment {
-    return [[NSUserDefaults standardUserDefaults] boolForKey:@"extendedComment"];
-}
-+ (BOOL)appLock {
-    return [[NSUserDefaults standardUserDefaults] boolForKey:@"padlock"];
-}
-+ (void)cleanCache {
-    NSArray <NSURL *> *DocumentFiles = [[NSFileManager defaultManager] contentsOfDirectoryAtURL:[NSURL fileURLWithPath:NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, true).firstObject] includingPropertiesForKeys:@[] options:NSDirectoryEnumerationSkipsHiddenFiles error:nil];
-    
-    for (NSURL *file in DocumentFiles) {
-        if ([file.pathExtension.lowercaseString isEqualToString:@"mp4"]) {
-            [[NSFileManager defaultManager] removeItemAtURL:file error:nil];
-        }
-        if ([file.pathExtension.lowercaseString isEqualToString:@"png"]) {
-            [[NSFileManager defaultManager] removeItemAtURL:file error:nil];
-        }
-        if ([file.pathExtension.lowercaseString isEqualToString:@"jpeg"]) {
-            [[NSFileManager defaultManager] removeItemAtURL:file error:nil];
-        }
-        if ([file.pathExtension.lowercaseString isEqualToString:@"mp3"]) {
-            [[NSFileManager defaultManager] removeItemAtURL:file error:nil];
-        }
-        if ([file.pathExtension.lowercaseString isEqualToString:@"m4a"]) {
-            [[NSFileManager defaultManager] removeItemAtURL:file error:nil];
-        }
-    }
-    
-    NSArray <NSURL *> *TempFiles = [[NSFileManager defaultManager] contentsOfDirectoryAtURL:[NSURL fileURLWithPath:NSTemporaryDirectory()] includingPropertiesForKeys:@[] options:NSDirectoryEnumerationSkipsHiddenFiles error:nil];
-    
-    for (NSURL *file in TempFiles) {
-        if ([file.pathExtension.lowercaseString isEqualToString:@"mp4"]) {
-            [[NSFileManager defaultManager] removeItemAtURL:file error:nil];
-        }
-        if ([file.pathExtension.lowercaseString isEqualToString:@"mov"]) {
-            [[NSFileManager defaultManager] removeItemAtURL:file error:nil];
-        }
-        if ([file.pathExtension.lowercaseString isEqualToString:@"tmp"]) {
-            [[NSFileManager defaultManager] removeItemAtURL:file error:nil];
-        }
-        if ([file.pathExtension.lowercaseString isEqualToString:@"png"]) {
-            [[NSFileManager defaultManager] removeItemAtURL:file error:nil];
-        }
-        if ([file.pathExtension.lowercaseString isEqualToString:@"jpeg"]) {
-            [[NSFileManager defaultManager] removeItemAtURL:file error:nil];
-        }
-        if ([file.pathExtension.lowercaseString isEqualToString:@"mp3"]) {
-            [[NSFileManager defaultManager] removeItemAtURL:file error:nil];
-        }
-        if ([file.pathExtension.lowercaseString isEqualToString:@"m4a"]) {
-            [[NSFileManager defaultManager] removeItemAtURL:file error:nil];
-        }
-        if ([file hasDirectoryPath]) {
-            if ([BHIManager isEmpty:file]) {
-                [[NSFileManager defaultManager] removeItemAtURL:file error:nil];
-            }
-        }
-    }
-}
-+ (BOOL)isEmpty:(NSURL *)url {
-    NSArray *FolderFiles = [[NSFileManager defaultManager] contentsOfDirectoryAtURL:url includingPropertiesForKeys:@[] options:NSDirectoryEnumerationSkipsHiddenFiles error:nil];
-    if (FolderFiles.count == 0) {
-        return true;
-    } else {
-        return false;
-    }
-}
-+ (void)showSaveVC:(id)item {
-    UIActivityViewController *acVC = [[UIActivityViewController alloc] initWithActivityItems:item applicationActivities:nil];
-    if (is_iPad()) {
-        acVC.popoverPresentationController.sourceView = topMostController().view;
-        acVC.popoverPresentationController.sourceRect = CGRectMake(topMostController().view.bounds.size.width / 2.0, topMostController().view.bounds.size.height / 2.0, 1.0, 1.0);
-    }
-    [topMostController() presentViewController:acVC animated:true completion:nil];
+
++ (BOOL)preferenceForKey:(NSString *)key {
+    return [NSUserDefaults.standardUserDefaults boolForKey:key];
 }
 
-+ (NSString *)getDownloadingPersent:(float)per {
-    NSNumberFormatter *numberFormatter = [[NSNumberFormatter alloc] init];
-    [numberFormatter setNumberStyle:NSNumberFormatterPercentStyle];
-    NSNumber *number = [NSNumber numberWithFloat:per];
-    return [numberFormatter stringFromNumber:number];
++ (BOOL)hideAds { return [self preferenceForKey:@"hide_ads"]; }
++ (BOOL)downloadVideos { return [self preferenceForKey:@"dw_videos"]; }
++ (BOOL)downloadMusics { return [self preferenceForKey:@"dw_musics"]; }
++ (BOOL)hideElementButton { return [self preferenceForKey:@"remove_elements_button"]; }
++ (BOOL)copyVideoDecription { return [self preferenceForKey:@"copy_decription"]; }
++ (BOOL)copyMusicLink { return [self preferenceForKey:@"copy_music_link"]; }
++ (BOOL)copyVideoLink { return [self preferenceForKey:@"copy_video_link"]; }
++ (BOOL)progressBar { return [self preferenceForKey:@"show_porgress_bar"]; }
++ (BOOL)likeConfirmation { return [self preferenceForKey:@"like_confirm"]; }
++ (BOOL)likeCommentConfirmation { return [self preferenceForKey:@"like_comment_confirm"]; }
++ (BOOL)dislikeCommentConfirmation { return [self preferenceForKey:@"dislike_comment_confirm"]; }
++ (BOOL)followConfirmation { return [self preferenceForKey:@"follow_confirm"]; }
++ (BOOL)profileSave { return [self preferenceForKey:@"save_profile"]; }
++ (BOOL)profileCopy { return [self preferenceForKey:@"copy_profile_information"]; }
++ (BOOL)alwaysOpenSafari { return [self preferenceForKey:@"openInBrowser"]; }
++ (BOOL)extendedBio { return [self preferenceForKey:@"extended_bio"]; }
++ (BOOL)extendedComment { return [self preferenceForKey:@"extendedComment"]; }
++ (BOOL)appLock { return [self preferenceForKey:@"padlock"]; }
+
++ (NSURL *)cacheDirectory {
+    NSURL *baseURL = [NSFileManager.defaultManager URLsForDirectory:NSCachesDirectory inDomains:NSUserDomainMask].firstObject;
+    return [baseURL URLByAppendingPathComponent:@"P6YTOK" isDirectory:YES];
 }
+
++ (void)cleanCache {
+    NSURL *cacheURL = [self cacheDirectory];
+    [NSFileManager.defaultManager removeItemAtURL:cacheURL error:nil];
+    [NSFileManager.defaultManager createDirectoryAtURL:cacheURL
+                           withIntermediateDirectories:YES
+                                            attributes:nil
+                                                 error:nil];
+}
+
++ (BOOL)isEmpty:(NSURL *)url {
+    NSArray *contents = [NSFileManager.defaultManager contentsOfDirectoryAtURL:url
+                                                   includingPropertiesForKeys:@[]
+                                                                      options:NSDirectoryEnumerationSkipsHiddenFiles
+                                                                        error:nil];
+    return contents.count == 0;
+}
+
++ (void)showSaveVC:(id)item {
+    if (!item) return;
+
+    NSArray *items = [item isKindOfClass:NSArray.class] ? item : @[item];
+    UIActivityViewController *activityController = [[UIActivityViewController alloc] initWithActivityItems:items applicationActivities:nil];
+
+    UIWindow *window = UIApplication.sharedApplication.windows.firstObject;
+    UIViewController *presenter = window.rootViewController;
+    while (presenter.presentedViewController) {
+        presenter = presenter.presentedViewController;
+    }
+
+    if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad) {
+        activityController.popoverPresentationController.sourceView = presenter.view;
+        activityController.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(presenter.view.bounds), CGRectGetMidY(presenter.view.bounds), 1.0, 1.0);
+    }
+
+    [presenter presentViewController:activityController animated:YES completion:nil];
+}
+
++ (NSString *)getDownloadingPersent:(float)progress {
+    NSNumberFormatter *formatter = [NSNumberFormatter new];
+    formatter.numberStyle = NSNumberFormatterPercentStyle;
+    return [formatter stringFromNumber:@(progress)];
+}
+
 @end
