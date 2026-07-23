@@ -613,19 +613,26 @@ static void P6YConfirmObjectAction(id object, id argument, const void *bypassKey
 
 %hook AWECommentPanelBaseCell
 - (void)onLikeAction:(id)sender {
-    if (![P6YManager boolForKey:@"p6y_confirm_comment_like"]) { %orig; return; }
+    if (![P6YManager boolForKey:@"p6y_confirm_comment_like"]) {
+        %orig(sender);
+        return;
+    }
     if ([objc_getAssociatedObject(self, P6YCommentLikeBypassKey) boolValue]) {
         objc_setAssociatedObject(self, P6YCommentLikeBypassKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        %orig;
+        %orig(sender);
         return;
     }
     P6YConfirmObjectAction(self, sender, P6YCommentLikeBypassKey, @selector(onLikeAction:), @"Like this comment?");
 }
+
 - (void)onDislikeAction:(id)sender {
-    if (![P6YManager boolForKey:@"p6y_confirm_comment_dislike"]) { %orig; return; }
+    if (![P6YManager boolForKey:@"p6y_confirm_comment_dislike"]) {
+        %orig(sender);
+        return;
+    }
     if ([objc_getAssociatedObject(self, P6YCommentDislikeBypassKey) boolValue]) {
         objc_setAssociatedObject(self, P6YCommentDislikeBypassKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        %orig;
+        %orig(sender);
         return;
     }
     P6YConfirmObjectAction(self, sender, P6YCommentDislikeBypassKey, @selector(onDislikeAction:), @"Dislike this comment?");
@@ -634,7 +641,10 @@ static void P6YConfirmObjectAction(id object, id argument, const void *bypassKey
 
 %hook _TtC17TikTokCommentImpl18TTKCommentItemView
 - (void)onLikeTapped {
-    if (![P6YManager boolForKey:@"p6y_confirm_comment_like"]) { %orig; return; }
+    if (![P6YManager boolForKey:@"p6y_confirm_comment_like"]) {
+        %orig;
+        return;
+    }
     if ([objc_getAssociatedObject(self, P6YCommentLikeBypassKey) boolValue]) {
         objc_setAssociatedObject(self, P6YCommentLikeBypassKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         %orig;
@@ -642,8 +652,12 @@ static void P6YConfirmObjectAction(id object, id argument, const void *bypassKey
     }
     P6YConfirmVoidAction(self, P6YCommentLikeBypassKey, @selector(onLikeTapped), @"Like this comment?");
 }
+
 - (void)onDislikeTapped {
-    if (![P6YManager boolForKey:@"p6y_confirm_comment_dislike"]) { %orig; return; }
+    if (![P6YManager boolForKey:@"p6y_confirm_comment_dislike"]) {
+        %orig;
+        return;
+    }
     if ([objc_getAssociatedObject(self, P6YCommentDislikeBypassKey) boolValue]) {
         objc_setAssociatedObject(self, P6YCommentDislikeBypassKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         %orig;
@@ -655,7 +669,10 @@ static void P6YConfirmObjectAction(id object, id argument, const void *bypassKey
 
 %hook TTKRelationButtonViewModelV2
 - (void)onRelationViewTapped {
-    if (![P6YManager boolForKey:@"p6y_confirm_follow"]) { %orig; return; }
+    if (![P6YManager boolForKey:@"p6y_confirm_follow"]) {
+        %orig;
+        return;
+    }
     if ([objc_getAssociatedObject(self, P6YFollowBypassKey) boolValue]) {
         objc_setAssociatedObject(self, P6YFollowBypassKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         %orig;
