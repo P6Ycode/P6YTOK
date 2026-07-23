@@ -1,0 +1,56 @@
+name: Report P6YTOK build result
+
+on:
+  workflow_run:
+    workflows:
+      - Build P6YTOK IPA
+    types:
+      - completed
+    branches:
+      - revive-tiktok-46.1.0
+
+permissions:
+  contents: write
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish run result
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          RUN_STATUS: ${{ github.event.workflow_run.status }}
+          RUN_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          set -euo pipefail
+          REPORT="$RUNNER_TEMP/build-result.txt"
+          {
+            echo "Run ID: $RUN_ID"
+            echo "Run: $RUN_URL"
+            echo "Status: $RUN_STATUS"
+            echo "Conclusion: $RUN_CONCLUSION"
+            echo "Source commit: $HEAD_SHA"
+            echo "Branch: $HEAD_BRANCH"
+          } > "$REPORT"
+
+          ENCODED="$(base64 -w 0 "$REPORT")"
+          API_PATH="repos/$REPOSITORY/contents/.github/last-build-result.txt"
+          CURRENT_SHA="$(gh api "$API_PATH?ref=revive-tiktok-46.1.0" --jq '.sha' 2>/dev/null || true)"
+
+          if [[ -n "$CURRENT_SHA" ]]; then
+            gh api --method PUT "$API_PATH" \
+              -f message='Record latest P6YTOK build result [skip ci]' \
+              -f branch='revive-tiktok-46.1.0' \
+              -f content="$ENCODED" \
+              -f sha="$CURRENT_SHA" >/dev/null
+          else
+            gh api --method PUT "$API_PATH" \
+              -f message='Record latest P6YTOK build result [skip ci]' \
+              -f branch='revive-tiktok-46.1.0' \
+              -f content="$ENCODED" >/dev/null
+          fi
