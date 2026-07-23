@@ -1,0 +1,151 @@
+name: Final Logos repair
+
+on:
+  push:
+    branches:
+      - revive-tiktok-46.1.0
+    paths:
+      - .github/workflows/repair-final.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: revive-tiktok-46.1.0
+          fetch-depth: 0
+
+      - name: Repair Tweak and build workflow
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          tweak = Path("Tweak.x")
+          text = tweak.read_text(encoding="utf-8")
+          start = text.index("static void P6YConfirmVoidAction")
+          end = text.index("%hook AWETextInputController", start)
+          replacement = r'''static void P6YConfirmVoidAction(id object, const void *bypassKey, SEL selector, NSString *message) {
+              __weak id weakObject = object;
+              [P6YManager presentConfirmationWithTitle:@"P6YTOK" message:message from:nil confirmed:^{
+                  id strongObject = weakObject;
+                  if (!strongObject) return;
+                  objc_setAssociatedObject(strongObject, bypassKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                  ((void (*)(id, SEL))objc_msgSend)(strongObject, selector);
+              }];
+          }
+
+          static void P6YConfirmObjectAction(id object, id argument, const void *bypassKey, SEL selector, NSString *message) {
+              __weak id weakObject = object;
+              [P6YManager presentConfirmationWithTitle:@"P6YTOK" message:message from:nil confirmed:^{
+                  id strongObject = weakObject;
+                  if (!strongObject) return;
+                  objc_setAssociatedObject(strongObject, bypassKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                  ((void (*)(id, SEL, id))objc_msgSend)(strongObject, selector, argument);
+              }];
+          }
+
+          %hook AWEFeedVideoButton
+          - (void)_onTouchUpInside {
+              NSString *imageName = [[P6YGet(self, @"imageNameString") description] lowercaseString];
+              BOOL isLikeButton = [imageName containsString:@"like"] || [imageName containsString:@"digg"];
+              BOOL enabled = [P6YManager boolForKey:@"p6y_confirm_like"] && isLikeButton;
+              BOOL bypass = [objc_getAssociatedObject(self, P6YLikeBypassKey) boolValue];
+              if (enabled && !bypass) {
+                  P6YConfirmVoidAction(self, P6YLikeBypassKey, @selector(_onTouchUpInside), @"Like this post?");
+                  return;
+              }
+              if (bypass) objc_setAssociatedObject(self, P6YLikeBypassKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+              %orig;
+          }
+          %end
+
+          %hook AWECommentPanelBaseCell
+          - (void)onLikeAction:(id)sender {
+              BOOL enabled = [P6YManager boolForKey:@"p6y_confirm_comment_like"];
+              BOOL bypass = [objc_getAssociatedObject(self, P6YCommentLikeBypassKey) boolValue];
+              if (enabled && !bypass) {
+                  P6YConfirmObjectAction(self, sender, P6YCommentLikeBypassKey, @selector(onLikeAction:), @"Like this comment?");
+                  return;
+              }
+              if (bypass) objc_setAssociatedObject(self, P6YCommentLikeBypassKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+              %orig;
+          }
+          - (void)onDislikeAction:(id)sender {
+              BOOL enabled = [P6YManager boolForKey:@"p6y_confirm_comment_dislike"];
+              BOOL bypass = [objc_getAssociatedObject(self, P6YCommentDislikeBypassKey) boolValue];
+              if (enabled && !bypass) {
+                  P6YConfirmObjectAction(self, sender, P6YCommentDislikeBypassKey, @selector(onDislikeAction:), @"Dislike this comment?");
+                  return;
+              }
+              if (bypass) objc_setAssociatedObject(self, P6YCommentDislikeBypassKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+              %orig;
+          }
+          %end
+
+          %hook _TtC17TikTokCommentImpl18TTKCommentItemView
+          - (void)onLikeTapped {
+              BOOL enabled = [P6YManager boolForKey:@"p6y_confirm_comment_like"];
+              BOOL bypass = [objc_getAssociatedObject(self, P6YCommentLikeBypassKey) boolValue];
+              if (enabled && !bypass) {
+                  P6YConfirmVoidAction(self, P6YCommentLikeBypassKey, @selector(onLikeTapped), @"Like this comment?");
+                  return;
+              }
+              if (bypass) objc_setAssociatedObject(self, P6YCommentLikeBypassKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+              %orig;
+          }
+          - (void)onDislikeTapped {
+              BOOL enabled = [P6YManager boolForKey:@"p6y_confirm_comment_dislike"];
+              BOOL bypass = [objc_getAssociatedObject(self, P6YCommentDislikeBypassKey) boolValue];
+              if (enabled && !bypass) {
+                  P6YConfirmVoidAction(self, P6YCommentDislikeBypassKey, @selector(onDislikeTapped), @"Dislike this comment?");
+                  return;
+              }
+              if (bypass) objc_setAssociatedObject(self, P6YCommentDislikeBypassKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+              %orig;
+          }
+          %end
+
+          %hook TTKRelationButtonViewModelV2
+          - (void)onRelationViewTapped {
+              BOOL enabled = [P6YManager boolForKey:@"p6y_confirm_follow"];
+              BOOL bypass = [objc_getAssociatedObject(self, P6YFollowBypassKey) boolValue];
+              if (enabled && !bypass) {
+                  P6YConfirmVoidAction(self, P6YFollowBypassKey, @selector(onRelationViewTapped), @"Change this follow relationship?");
+                  return;
+              }
+              if (bypass) objc_setAssociatedObject(self, P6YFollowBypassKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+              %orig;
+          }
+          %end
+
+          '''
+          tweak.write_text(text[:start] + replacement + text[end:], encoding="utf-8")
+
+          workflow = Path(".github/workflows/build-ipa.yml")
+          workflow_text = workflow.read_text(encoding="utf-8")
+          possible = [
+              workflow_text.find("      - name: Normalize Logos confirmation hooks"),
+              workflow_text.find("      - name: Verify normalized confirmation hooks"),
+              workflow_text.find("      - name: Persist Logos source fix"),
+          ]
+          possible = [position for position in possible if position >= 0]
+          if possible:
+              edit_start = min(possible)
+              edit_end = workflow_text.index("      - name: Resolve base IPA", edit_start)
+              workflow_text = workflow_text[:edit_start] + workflow_text[edit_end:]
+          workflow.write_text(workflow_text, encoding="utf-8")
+          PY
+
+          git rm .github/workflows/repair-final.yml
+
+      - name: Commit and push
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "Fix Logos confirmation hook generation [skip ci]"
+          git push origin HEAD:revive-tiktok-46.1.0
