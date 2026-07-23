@@ -1,9 +1,9 @@
-Package: com.bandarhl.bhtiktok
-Name: BHTikTok
-Version: 0.0.1
+Package: com.p6ycode.p6ytok
+Name: P6YTOK
+Version: 0.1.0-alpha1
 Architecture: iphoneos-arm
-Description: An awesome tweak for TikTok!
-Maintainer: Bandar Alruwaili
-Author: Bandar Alruwaili
+Description: P6YTOK revival for TikTok 46.1.0.
+Maintainer: P6Ycode
+Author: P6Ycode
 Section: Tweaks
 Depends: mobilesubstrate, ws.hbang.common
