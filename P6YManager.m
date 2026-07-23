@@ -24,6 +24,7 @@
         @"p6y_startup_page": @0,
 
         @"p6y_story_timer": @YES,
+        @"p6y_likes_cleanup": @YES,
 
         @"p6y_live_zoom": @YES,
 
