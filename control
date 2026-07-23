@@ -1,8 +1,8 @@
 Package: com.p6ycode.p6ytok
 Name: P6YTOK
-Version: 0.2.0-alpha1
+Version: 0.2.0-alpha2
 Architecture: iphoneos-arm
-Description: P6YTOK revival for TikTok 46.1.0 with full-quality media, LIVE zoom, story time, and profile history.
+Description: P6YTOK for TikTok 46.1.0 with full-quality media, LIVE zoom, story time, profile history, and sideload keychain login compatibility.
 Maintainer: P6Ycode
 Author: P6Ycode
 Section: Tweaks
