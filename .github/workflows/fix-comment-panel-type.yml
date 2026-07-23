@@ -1,0 +1,64 @@
+name: Fix comment panel controller typing
+
+on:
+  push:
+    branches:
+      - revive-tiktok-46.1.0
+    paths:
+      - .github/workflows/fix-comment-panel-type.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: revive-tiktok-46.1.0
+          fetch-depth: 0
+
+      - name: Replace forward-class property access
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          path = Path("Tweak.x")
+          text = path.read_text(encoding="utf-8")
+          start = text.index("%hook TTKCommentPanelViewController")
+          end = text.index("%end", start) + len("%end")
+          replacement = r'''%hook TTKCommentPanelViewController
+          - (void)loadView {
+              %orig;
+              UIView *panelView = ((UIViewController *)self).view;
+              if ([P6YManager boolForKey:@"p6y_transparent_comments"]) {
+                  panelView.backgroundColor = [UIColor colorWithWhite:0 alpha:0.62];
+              }
+          }
+
+          - (void)viewDidLayoutSubviews {
+              %orig;
+              if (![P6YManager boolForKey:@"p6y_transparent_comments"]) return;
+              UIView *panelView = ((UIViewController *)self).view;
+              panelView.backgroundColor = [UIColor colorWithWhite:0 alpha:0.62];
+              UIView *archView = P6YGet(self, @"archView");
+              UITableView *list = P6YGet(self, @"listTableView");
+              archView.backgroundColor = UIColor.clearColor;
+              list.backgroundColor = UIColor.clearColor;
+          }
+          %end'''
+          text = text[:start] + replacement + text[end:]
+          if "self.view" in text[start:start + len(replacement) + 40]:
+              raise SystemExit("Forward-class self.view access remains")
+          path.write_text(text, encoding="utf-8")
+          Path(".github/workflows/fix-comment-panel-type.yml").unlink()
+          PY
+
+      - name: Commit type fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Tweak.x .github/workflows/fix-comment-panel-type.yml
+          git commit -m "Fix comment panel forward-class typing"
+          git push origin HEAD:revive-tiktok-46.1.0
