@@ -275,17 +275,17 @@ static void P6YFollowerUpdateButton(id adaptor, id user) {
 %hook TTKProfileHeaderAdaptor
 
 - (void)updateUIWithModel:(id)model {
-    %orig;
+    %orig(model);
     P6YFollowerUpdateButton(self, model ?: P6YFollowerGet(self, @"user"));
 }
 
 - (void)configWithUser:(id)user {
-    %orig;
+    %orig(user);
     P6YFollowerUpdateButton(self, user);
 }
 
 - (void)updateUser:(id)user {
-    %orig;
+    %orig(user);
     P6YFollowerUpdateButton(self, user);
 }
 

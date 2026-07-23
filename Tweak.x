@@ -465,14 +465,18 @@ static void P6YUpdateProfileThumbnail(UIView *cell, id model) {
 
 %hook AWEAwemeModel
 - (BOOL)progressBarDraggable {
-    return [P6YManager boolForKey:@"p6y_download_progress"] || %orig;
+    BOOL original = %orig;
+    return [P6YManager boolForKey:@"p6y_download_progress"] || original;
 }
+
 - (BOOL)progressBarVisible {
-    return [P6YManager boolForKey:@"p6y_download_progress"] || %orig;
+    BOOL original = %orig;
+    return [P6YManager boolForKey:@"p6y_download_progress"] || original;
 }
+
 - (BOOL)shouldShowMaskView:(BOOL)argument {
     if ([P6YManager boolForKey:@"p6y_disable_warnings"]) return NO;
-    return %orig;
+    return %orig(argument);
 }
 %end
 
@@ -769,26 +773,25 @@ static void P6YConfirmObjectAction(id object, id argument, const void *bypassKey
 %hook AWEFeedCellViewController
 - (void)playerWillLoopPlaying:(id)player {
     NSInteger action = [P6YManager integerForKey:@"p6y_playback_action"];
-    if (action == 0) { %orig; return; }
+    if (action == 0) {
+        %orig(player);
+        return;
+    }
     if (action == 1) return;
+
     UIViewController *feed = P6YFindFeedController(self);
     if (P6YResponds(feed, @"scrollToNextVideo")) {
         ((void (*)(id, SEL))objc_msgSend)(feed, NSSelectorFromString(@"scrollToNextVideo"));
         return;
     }
-    %orig;
+    %orig(player);
 }
 %end
 
-%hook AWEFeedContainerViewController
-- (void)viewDidAppear:(BOOL)animated {
-    %orig;
-    if ([objc_getAssociatedObject(self, P6YStartupAppliedKey) boolValue]) return;
-    objc_setAssociatedObject(self, P6YStartupAppliedKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    NSInteger page = [P6YManager integerForKey:@"p6y_startup_page"];
-    __weak id weakSelf = self;
+static void P6YScheduleStartupPage(id controller, NSInteger page) {
+    __weak id weakController = controller;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.45 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        id strongSelf = weakSelf;
+        id strongSelf = weakController;
         if (!strongSelf || !P6YResponds(strongSelf, @"numberOfTabs")) return;
         NSUInteger count = ((NSUInteger (*)(id, SEL))objc_msgSend)(strongSelf, NSSelectorFromString(@"numberOfTabs"));
         for (NSUInteger index = 0; index < count; index++) {
@@ -808,6 +811,15 @@ static void P6YConfirmObjectAction(id object, id argument, const void *bypassKey
             break;
         }
     });
+}
+
+%hook AWEFeedContainerViewController
+- (void)viewDidAppear:(BOOL)animated {
+    %orig(animated);
+    if ([objc_getAssociatedObject(self, P6YStartupAppliedKey) boolValue]) return;
+    objc_setAssociatedObject(self, P6YStartupAppliedKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    NSInteger page = [P6YManager integerForKey:@"p6y_startup_page"];
+    P6YScheduleStartupPage(self, page);
 }
 %end
 

@@ -189,20 +189,24 @@ static void P6YInstallLiveZoomGestures(UIViewController *controller) {
     }
 }
 
+static void P6YScheduleLiveZoomInstall(UIViewController *controller) {
+    __weak UIViewController *weakController = controller;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        UIViewController *strongController = weakController;
+        if (strongController) P6YInstallLiveZoomGestures(strongController);
+    });
+}
+
 %hook UIViewController
 
 - (void)viewDidAppear:(BOOL)animated {
-    %orig;
-    if (P6YLooksLikeLiveRoomController(self)) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            P6YInstallLiveZoomGestures(self);
-        });
-    }
+    %orig(animated);
+    if (P6YLooksLikeLiveRoomController(self)) P6YScheduleLiveZoomInstall(self);
 }
 
 - (void)viewDidDisappear:(BOOL)animated {
     if (P6YLooksLikeLiveRoomController(self)) P6YResetLiveZoom(self, NO);
-    %orig;
+    %orig(animated);
 }
 
 %new

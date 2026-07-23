@@ -375,11 +375,15 @@ static void P6YInstallProfilePhotoHook(void) {
     method_setImplementation(method, (IMP)P6YFullResolutionProfileLongPress);
 }
 
-%ctor {
-    %init;
+static void P6YScheduleQualityHookInstall(void) {
     dispatch_async(dispatch_get_main_queue(), ^{
         P6YInstallHighestQualityVideoGetter();
         P6YInstallDownloadResolutionHooks();
         P6YInstallProfilePhotoHook();
     });
+}
+
+%ctor {
+    %init;
+    P6YScheduleQualityHookInstall();
 }
