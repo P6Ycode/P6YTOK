@@ -1,27 +1,27 @@
 Status: failure
-Run: https://github.com/P6Ycode/P6YTOK/actions/runs/30045848628
-Source commit: 20c93cb11bef3861bec06672c60f385497209e19
+Run: https://github.com/P6Ycode/P6YTOK/actions/runs/30046037735
+Source commit: 2bfa0d655d6f6c93a158fb5af511c990d0a88fc5
 
 Relevant output:
-[0;32m==> [1;39mCompiling Tweak.x (arm64)…[m
-[1mTweak.x:624:191: [0m[0;1;31merror: [0m[1mfunction definition is not allowed here[0m
+[0;1;32m            ^
+[0m[1mTweak.x:644:191: [0m[0;1;31merror: [0m[1mfunction definition is not allowed here[0m
 static void _logos_method$_ungrouped$AWECommentPanelBaseCell$onDislikeAction$(_LOGOS_SELF_TYPE_NORMAL AWECommentPanelBaseCell* _LOGOS_SELF_CONST __unused self, SEL __unused _cmd, id sender) {
 [0;1;32m                                                                                                                                                                                              ^
-[0m[1mTweak.x:802:2: [0m[0;1;31merror: [0m[1mexpected '}'[0m
+[0m[1mTweak.x:822:2: [0m[0;1;31merror: [0m[1mexpected '}'[0m
 }
 [0;1;32m ^
-[0m[1mTweak.x:615:188: [0m[0;1;30mnote: [0mto match this '{'[0m
+[0m[1mTweak.x:635:188: [0m[0;1;30mnote: [0mto match this '{'[0m
 static void _logos_method$_ungrouped$AWECommentPanelBaseCell$onLikeAction$(_LOGOS_SELF_TYPE_NORMAL AWECommentPanelBaseCell* _LOGOS_SELF_CONST __unused self, SEL __unused _cmd, id sender) {
 [0;1;32m                                                                                                                                                                                           ^
-[0m2 errors generated.
+[0m4 errors generated.
 make[3]: *** [/Users/runner/work/P6YTOK/P6YTOK/theos/makefiles/instance/rules.mk:404: /Users/runner/work/P6YTOK/P6YTOK/.theos/obj/arm64/Tweak.x.c354dffe.o] Error 1
 make[3]: *** Waiting for unfinished jobs....
 [0;32m==> [1;39mCompiling P6YDownloadManager.m (arm64)…[m
 ---
-[0m[1mTweak.x:615:188: [0m[0;1;30mnote: [0mto match this '{'[0m
+[0m[1mTweak.x:635:188: [0m[0;1;30mnote: [0mto match this '{'[0m
 static void _logos_method$_ungrouped$AWECommentPanelBaseCell$onLikeAction$(_LOGOS_SELF_TYPE_NORMAL AWECommentPanelBaseCell* _LOGOS_SELF_CONST __unused self, SEL __unused _cmd, id sender) {
 [0;1;32m                                                                                                                                                                                           ^
-[0m2 errors generated.
+[0m4 errors generated.
 make[3]: *** [/Users/runner/work/P6YTOK/P6YTOK/theos/makefiles/instance/rules.mk:404: /Users/runner/work/P6YTOK/P6YTOK/.theos/obj/arm64/Tweak.x.c354dffe.o] Error 1
 make[3]: *** Waiting for unfinished jobs....
 [0;32m==> [1;39mCompiling P6YDownloadManager.m (arm64)…[m
@@ -33,7 +33,7 @@ make: *** [/Users/runner/work/P6YTOK/P6YTOK/theos/makefiles/master/rules.mk:146:
 ---
 static void _logos_method$_ungrouped$AWECommentPanelBaseCell$onLikeAction$(_LOGOS_SELF_TYPE_NORMAL AWECommentPanelBaseCell* _LOGOS_SELF_CONST __unused self, SEL __unused _cmd, id sender) {
 [0;1;32m                                                                                                                                                                                           ^
-[0m2 errors generated.
+[0m4 errors generated.
 make[3]: *** [/Users/runner/work/P6YTOK/P6YTOK/theos/makefiles/instance/rules.mk:404: /Users/runner/work/P6YTOK/P6YTOK/.theos/obj/arm64/Tweak.x.c354dffe.o] Error 1
 make[3]: *** Waiting for unfinished jobs....
 [0;32m==> [1;39mCompiling P6YDownloadManager.m (arm64)…[m
