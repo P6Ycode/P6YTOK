@@ -46,6 +46,21 @@ jobs:
           if missing:
               raise SystemExit(f"Missing compiled source files: {', '.join(missing)}")
 
+          if "P6YKeychainFix.x" in sources:
+              raise SystemExit("Unsafe global Keychain compatibility source is compiled")
+
+          keychain_symbols = (
+              "SecItemAdd", "SecItemCopyMatching", "SecItemUpdate",
+              "SecItemDelete", "kSecAttrAccessGroup",
+          )
+          for source_name in sources:
+              source_text = Path(source_name).read_text(encoding="utf-8")
+              found = [symbol for symbol in keychain_symbols if symbol in source_text]
+              if found:
+                  raise SystemExit(
+                      f"Authentication-sensitive Keychain symbols in {source_name}: {', '.join(found)}"
+                  )
+
           logos_sources = [Path(name) for name in sources if name.endswith(".x")]
           for source in logos_sources:
               text = source.read_text(encoding="utf-8")
