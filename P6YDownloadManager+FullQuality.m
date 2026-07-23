@@ -29,18 +29,20 @@
         return;
     }
 
+    NSArray<NSURL *> *originalFiles = [files copy];
     void (^saveOriginalResources)(void) = ^{
         [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
-            for (NSURL *fileURL in files) {
+            for (NSURL *fileURL in originalFiles) {
                 if (![fileURL isFileURL]) continue;
                 PHAssetCreationRequest *request = [PHAssetCreationRequest creationRequestForAsset];
                 PHAssetResourceCreationOptions *options = [[PHAssetResourceCreationOptions alloc] init];
                 options.originalFilename = fileURL.lastPathComponent;
+                options.shouldMoveFile = NO;
                 PHAssetResourceType resourceType = kind == P6YMediaKindVideo ? PHAssetResourceTypeVideo : PHAssetResourceTypePhoto;
                 [request addResourceWithType:resourceType fileURL:fileURL options:options];
             }
         } completionHandler:^(BOOL success, NSError *error) {
-            NSString *message = success ? (title.length ? title : @"Saved at full quality") : (error.localizedDescription ?: @"Could not save media");
+            NSString *message = success ? (title.length ? title : @"Saved at full quality") : (error.localizedDescription ?: @"Could not save original media");
             [P6YManager showToast:message];
         }];
     };
