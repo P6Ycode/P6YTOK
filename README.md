@@ -1,30 +1,34 @@
-# BHTikTok
-An awesome tweak for TikTok!
+# P6YTOK
 
-# Features
-- No Ads
-- Download Videos
-- Download Musics
-- Show/Hide UI button
-- Copy video decription
-- Copy video link
-- Copy Music link
-- Auto Play Next Video
-- Show progress bar
-- Confirm like
-- Confirm comment like
-- Confirm comment dislike
-- Confirm follow
-- Save profile image
-- Copy profile information
-- Extend bio
-- Extend comment
-- Always open in Safari
-- Changing region
-- Fake verify blue mark
-- Fake Follower count
-- Fake Following count
-- Padlock
+P6YTOK is a clean revival of the former TikTok tweak codebase for TikTok 46.1.0 and iOS 15 or newer.
 
-# TODO
--  [ ] Add Localization for the tweak.
+## Current revival status
+
+Phase 1 is focused on removing obsolete or risky behavior before the modern feature implementations are rebuilt.
+
+### Removed
+
+- Fake verification badge
+- Fake follower and following counts
+- Region and carrier spoofing
+- Destructive interaction-reset tools
+- Broad jailbreak and sideload detection overrides
+- Unverified watermark override
+- Legacy donation and developer links
+- Former project branding and package identity
+
+### Safe core retained
+
+- P6YTOK settings entry
+- Disable ads
+- TikTok progress bar override
+- Like, comment, and follow confirmations
+- Extended bio and comment limits
+- Passcode lock
+- Open links in the external browser
+
+### Next
+
+The downloader, photo saving, music saving, sharing, copy actions, Pure Mode, profile tools, and modern progress UI will be rebuilt for TikTok 46.1.0.
+
+See `REVIVAL_AUDIT.md` for compatibility details.
