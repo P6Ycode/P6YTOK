@@ -58,6 +58,10 @@ static UIColor *P6YRed(void) {
         @{ @"title": @"STORIES", @"rows": @[
             [self switchRow:@"Posted and remaining time" detail:@"Shows the posted timestamp and a live countdown in 24-hour format. Uses TikTok's expiry time when available, otherwise 24 hours after posting." key:@"p6y_story_timer"]
         ]},
+        @{ @"title": @"LIKES", @"rows": @[
+            [self switchRow:@"Cleanup and batch selection" detail:@"Marks unavailable liked posts, opens Select mode, auto-selects detected broken entries, and enables full-quality batch downloads." key:@"p6y_likes_cleanup"],
+            @{ @"type": @"info", @"title": @"Loaded items only", @"detail": @"Broken, All, Download, and Remove operate on posts TikTok has already loaded. Remove is limited to entries detected as unavailable." }
+        ]},
         @{ @"title": @"LIVE", @"rows": @[
             [self switchRow:@"Pinch to zoom" detail:@"Clear the LIVE controls, then pinch anywhere to zoom from 1× to 4×. Two-finger double-tap resets." key:@"p6y_live_zoom"]
         ]},
@@ -79,7 +83,8 @@ static UIColor *P6YRed(void) {
             [self switchRow:@"Confirm follows" detail:@"Ask before changing a follow relationship" key:@"p6y_confirm_follow"]
         ]},
         @{ @"title": @"ABOUT", @"rows": @[
-            @{ @"type": @"info", @"title": @"P6YTOK 0.1.5", @"detail": @"Adds story posted timestamps and live remaining-time countdowns for TikTok 46.1.0" },
+            @{ @"type": @"info", @"title": @"P6YTOK 0.1.6", @"detail": @"Adds unavailable-like detection, Select mode, broken-entry cleanup, and full-quality batch downloads for TikTok 46.1.0" },
+            @{ @"type": @"info", @"title": @"Likes cleanup", @"detail": @"Entering Select automatically selects detected broken entries. All selects every loaded post; Download skips broken items; Remove only targets detected broken entries." },
             @{ @"type": @"info", @"title": @"Story timing", @"detail": @"Posted time uses MM/dd HH:mm:ss and remaining time uses HH:mm:ss. TikTok's expiration timestamp is preferred when exposed." },
             @{ @"type": @"info", @"title": @"Follower timestamps", @"detail": @"Follower changes are measured between profile visits. Times show the observation window, not TikTok's exact individual follow or unfollow time." },
             @{ @"type": @"info", @"title": @"Quality behavior", @"detail": @"Uses the largest/original media variant TikTok exposes and writes original files to Photos without re-encoding" }
