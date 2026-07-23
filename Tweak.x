@@ -574,6 +574,26 @@ static void P6YUpdateProfileThumbnail(UIView *cell, id model) {
 }
 %end
 
+static void P6YConfirmVoidAction(id object, const void *bypassKey, SEL selector, NSString *message) {
+    __weak id weakObject = object;
+    [P6YManager presentConfirmationWithTitle:@"P6YTOK" message:message from:nil confirmed:^{
+        id strongObject = weakObject;
+        if (!strongObject) return;
+        objc_setAssociatedObject(strongObject, bypassKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        ((void (*)(id, SEL))objc_msgSend)(strongObject, selector);
+    }];
+}
+
+static void P6YConfirmObjectAction(id object, id argument, const void *bypassKey, SEL selector, NSString *message) {
+    __weak id weakObject = object;
+    [P6YManager presentConfirmationWithTitle:@"P6YTOK" message:message from:nil confirmed:^{
+        id strongObject = weakObject;
+        if (!strongObject) return;
+        objc_setAssociatedObject(strongObject, bypassKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        ((void (*)(id, SEL, id))objc_msgSend)(strongObject, selector, argument);
+    }];
+}
+
 %hook AWEFeedVideoButton
 - (void)_onTouchUpInside {
     NSString *imageName = [[P6YGet(self, @"imageNameString") description] lowercaseString];
@@ -587,13 +607,7 @@ static void P6YUpdateProfileThumbnail(UIView *cell, id model) {
         %orig;
         return;
     }
-    __weak id weakSelf = self;
-    [P6YManager presentConfirmationWithTitle:@"P6YTOK" message:@"Like this post?" from:nil confirmed:^{
-        id strongSelf = weakSelf;
-        if (!strongSelf) return;
-        objc_setAssociatedObject(strongSelf, P6YLikeBypassKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        ((void (*)(id, SEL))objc_msgSend)(strongSelf, @selector(_onTouchUpInside));
-    }];
+    P6YConfirmVoidAction(self, P6YLikeBypassKey, @selector(_onTouchUpInside), @"Like this post?");
 }
 %end
 
@@ -605,13 +619,7 @@ static void P6YUpdateProfileThumbnail(UIView *cell, id model) {
         %orig;
         return;
     }
-    __weak id weakSelf = self;
-    [P6YManager presentConfirmationWithTitle:@"P6YTOK" message:@"Like this comment?" from:nil confirmed:^{
-        id strongSelf = weakSelf;
-        if (!strongSelf) return;
-        objc_setAssociatedObject(strongSelf, P6YCommentLikeBypassKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        ((void (*)(id, SEL, id))objc_msgSend)(strongSelf, @selector(onLikeAction:), sender);
-    }];
+    P6YConfirmObjectAction(self, sender, P6YCommentLikeBypassKey, @selector(onLikeAction:), @"Like this comment?");
 }
 - (void)onDislikeAction:(id)sender {
     if (![P6YManager boolForKey:@"p6y_confirm_comment_dislike"]) { %orig; return; }
@@ -620,13 +628,7 @@ static void P6YUpdateProfileThumbnail(UIView *cell, id model) {
         %orig;
         return;
     }
-    __weak id weakSelf = self;
-    [P6YManager presentConfirmationWithTitle:@"P6YTOK" message:@"Dislike this comment?" from:nil confirmed:^{
-        id strongSelf = weakSelf;
-        if (!strongSelf) return;
-        objc_setAssociatedObject(strongSelf, P6YCommentDislikeBypassKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        ((void (*)(id, SEL, id))objc_msgSend)(strongSelf, @selector(onDislikeAction:), sender);
-    }];
+    P6YConfirmObjectAction(self, sender, P6YCommentDislikeBypassKey, @selector(onDislikeAction:), @"Dislike this comment?");
 }
 %end
 
@@ -638,13 +640,7 @@ static void P6YUpdateProfileThumbnail(UIView *cell, id model) {
         %orig;
         return;
     }
-    __weak id weakSelf = self;
-    [P6YManager presentConfirmationWithTitle:@"P6YTOK" message:@"Like this comment?" from:nil confirmed:^{
-        id strongSelf = weakSelf;
-        if (!strongSelf) return;
-        objc_setAssociatedObject(strongSelf, P6YCommentLikeBypassKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        ((void (*)(id, SEL))objc_msgSend)(strongSelf, @selector(onLikeTapped));
-    }];
+    P6YConfirmVoidAction(self, P6YCommentLikeBypassKey, @selector(onLikeTapped), @"Like this comment?");
 }
 - (void)onDislikeTapped {
     if (![P6YManager boolForKey:@"p6y_confirm_comment_dislike"]) { %orig; return; }
@@ -653,13 +649,7 @@ static void P6YUpdateProfileThumbnail(UIView *cell, id model) {
         %orig;
         return;
     }
-    __weak id weakSelf = self;
-    [P6YManager presentConfirmationWithTitle:@"P6YTOK" message:@"Dislike this comment?" from:nil confirmed:^{
-        id strongSelf = weakSelf;
-        if (!strongSelf) return;
-        objc_setAssociatedObject(strongSelf, P6YCommentDislikeBypassKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        ((void (*)(id, SEL))objc_msgSend)(strongSelf, @selector(onDislikeTapped));
-    }];
+    P6YConfirmVoidAction(self, P6YCommentDislikeBypassKey, @selector(onDislikeTapped), @"Dislike this comment?");
 }
 %end
 
@@ -671,13 +661,7 @@ static void P6YUpdateProfileThumbnail(UIView *cell, id model) {
         %orig;
         return;
     }
-    __weak id weakSelf = self;
-    [P6YManager presentConfirmationWithTitle:@"P6YTOK" message:@"Change this follow relationship?" from:nil confirmed:^{
-        id strongSelf = weakSelf;
-        if (!strongSelf) return;
-        objc_setAssociatedObject(strongSelf, P6YFollowBypassKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        ((void (*)(id, SEL))objc_msgSend)(strongSelf, @selector(onRelationViewTapped));
-    }];
+    P6YConfirmVoidAction(self, P6YFollowBypassKey, @selector(onRelationViewTapped), @"Change this follow relationship?");
 }
 %end
 
