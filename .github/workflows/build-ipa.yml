@@ -30,6 +30,7 @@ jobs:
       - name: Audit compiled source files
         run: |
           python3 <<'PY'
+          import re
           from pathlib import Path
 
           makefile = Path("Makefile").read_text(encoding="utf-8")
@@ -48,8 +49,14 @@ jobs:
           logos_sources = [Path(name) for name in sources if name.endswith(".x")]
           for source in logos_sources:
               text = source.read_text(encoding="utf-8")
-              if text.count("%hook") != text.count("%end"):
-                  raise SystemExit(f"Unbalanced %hook/%end in {source}")
+              block_count = sum([
+                  len(re.findall(r"(?m)^\s*%hook\s+\S+", text)),
+                  len(re.findall(r"(?m)^\s*%group\s+\S+", text)),
+                  len(re.findall(r"(?m)^\s*%subclass\s+\S+", text)),
+              ])
+              end_count = len(re.findall(r"(?m)^\s*%end(?:\s|$)", text))
+              if block_count != end_count:
+                  raise SystemExit(f"Unbalanced Logos blocks in {source}: {block_count} openings, {end_count} endings")
 
           tweak = Path("Tweak.x").read_text(encoding="utf-8")
           if tweak.count("static void P6YConfirmVoidAction") != 1:
@@ -128,8 +135,8 @@ jobs:
           make -j1 clean package FINALPACKAGE=1 2>&1 | tee artifacts/build.log
           DEB="$(find packages -type f -name '*.deb' -print | sort | tail -n 1)"
           test -n "$DEB"
-          cp "$DEB" artifacts/P6YTOK_0.1.6_iphoneos-arm.deb
-          echo "DEB_PATH=$GITHUB_WORKSPACE/artifacts/P6YTOK_0.1.6_iphoneos-arm.deb" >> "$GITHUB_ENV"
+          cp "$DEB" artifacts/P6YTOK_0.2.0-alpha2_iphoneos-arm.deb
+          echo "DEB_PATH=$GITHUB_WORKSPACE/artifacts/P6YTOK_0.2.0-alpha2_iphoneos-arm.deb" >> "$GITHUB_ENV"
 
       - name: Upload compiler log
         if: always()
@@ -144,7 +151,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: P6YTOK-deb
-          path: artifacts/P6YTOK_0.1.6_iphoneos-arm.deb
+          path: artifacts/P6YTOK_0.2.0-alpha2_iphoneos-arm.deb
           if-no-files-found: error
           retention-days: 14
 
