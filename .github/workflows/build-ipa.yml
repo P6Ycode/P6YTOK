@@ -1,0 +1,136 @@
+name: Build P6YTOK IPA
+
+on:
+  push:
+    branches:
+      - revive-tiktok-46.1.0
+  workflow_dispatch:
+    inputs:
+      ipa_url:
+        description: Direct URL to a decrypted TikTok 46.1.0 IPA (optional when P6YTOK_IPA_URL is configured as a repository secret)
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: p6ytok-ipa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build tweak and package IPA
+    runs-on: macos-14
+    timeout-minutes: 45
+    env:
+      THEOS: ${{ github.workspace }}/theos
+      IPA_URL: ${{ inputs.ipa_url || secrets.P6YTOK_IPA_URL }}
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: |
+          brew update
+          brew install make ldid dpkg coreutils gnu-sed findutils
+          echo "$(brew --prefix make)/libexec/gnubin" >> "$GITHUB_PATH"
+          echo "$(brew --prefix coreutils)/libexec/gnubin" >> "$GITHUB_PATH"
+          echo "$(brew --prefix gnu-sed)/libexec/gnubin" >> "$GITHUB_PATH"
+          echo "$(brew --prefix findutils)/libexec/gnubin" >> "$GITHUB_PATH"
+
+      - name: Install Theos
+        run: |
+          git clone --depth 1 --recurse-submodules --shallow-submodules https://github.com/theos/theos.git "$THEOS"
+
+      - name: Build P6YTOK package
+        run: |
+          set -euo pipefail
+          rm -rf packages .theos
+          make clean package FINALPACKAGE=1
+          DEB="$(find "$GITHUB_WORKSPACE/packages" -type f -name '*.deb' -print | sort | tail -n 1)"
+          test -n "$DEB"
+          mkdir -p "$GITHUB_WORKSPACE/artifacts"
+          cp "$DEB" "$GITHUB_WORKSPACE/artifacts/P6YTOK_0.1.6_iphoneos-arm.deb"
+          echo "DEB_PATH=$GITHUB_WORKSPACE/artifacts/P6YTOK_0.1.6_iphoneos-arm.deb" >> "$GITHUB_ENV"
+
+      - name: Upload tweak package
+        uses: actions/upload-artifact@v4
+        with:
+          name: P6YTOK-deb
+          path: artifacts/P6YTOK_0.1.6_iphoneos-arm.deb
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Check for decrypted IPA input
+        id: ipa_input
+        shell: bash
+        run: |
+          if [[ -n "${IPA_URL:-}" ]]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+            echo "A decrypted IPA URL is available; IPA packaging will run." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "## IPA packaging skipped"
+              echo
+              echo "The tweak package was built successfully, but GitHub Actions needs a decrypted TikTok 46.1.0 IPA to create the final IPA."
+              echo "Configure the repository secret \`P6YTOK_IPA_URL\` with a direct private download URL, or run this workflow manually and supply \`ipa_url\`."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Download and validate base IPA
+        if: steps.ipa_input.outputs.available == 'true'
+        run: |
+          set -euo pipefail
+          BASE_IPA="$RUNNER_TEMP/TikTok_46.1.0_decrypted.ipa"
+          curl --fail --location --retry 3 --retry-delay 3 "$IPA_URL" --output "$BASE_IPA"
+          unzip -tq "$BASE_IPA"
+          rm -rf "$RUNNER_TEMP/ipa-check"
+          mkdir -p "$RUNNER_TEMP/ipa-check"
+          unzip -q "$BASE_IPA" -d "$RUNNER_TEMP/ipa-check"
+          APP_DIR="$(find "$RUNNER_TEMP/ipa-check/Payload" -maxdepth 1 -type d -name '*.app' -print | head -n 1)"
+          test -n "$APP_DIR"
+          VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_DIR/Info.plist")"
+          BUILD="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_DIR/Info.plist")"
+          if [[ "$VERSION" != "46.1.0" ]]; then
+            echo "Expected TikTok 46.1.0, received version $VERSION (build $BUILD)." >&2
+            exit 1
+          fi
+          echo "BASE_IPA=$BASE_IPA" >> "$GITHUB_ENV"
+
+      - name: Install Azule injector
+        if: steps.ipa_input.outputs.available == 'true'
+        run: |
+          set -euo pipefail
+          AZULE_DIR="$RUNNER_TEMP/Azule"
+          git clone --depth 1 https://github.com/mpelteshki/Azule.git "$AZULE_DIR"
+          chmod +x "$AZULE_DIR/azule"
+          echo "AZULE_DIR=$AZULE_DIR" >> "$GITHUB_ENV"
+
+      - name: Inject P6YTOK and create IPA
+        if: steps.ipa_input.outputs.available == 'true'
+        run: |
+          set -euo pipefail
+          OUTPUT_DIR="$RUNNER_TEMP/p6ytok-output"
+          mkdir -p "$OUTPUT_DIR"
+          "$AZULE_DIR/azule" -i "$BASE_IPA" -o "$OUTPUT_DIR" -f "$DEB_PATH"
+          BUILT_IPA="$(find "$OUTPUT_DIR" -type f -name '*.ipa' -print | sort | tail -n 1)"
+          test -n "$BUILT_IPA"
+          cp "$BUILT_IPA" "$GITHUB_WORKSPACE/artifacts/P6YTOK_TikTok_46.1.0.ipa"
+          {
+            echo "## IPA built"
+            echo
+            echo "Artifact: \`P6YTOK_TikTok_46.1.0.ipa\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload IPA
+        if: steps.ipa_input.outputs.available == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: P6YTOK-TikTok-46.1.0-IPA
+          path: artifacts/P6YTOK_TikTok_46.1.0.ipa
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
