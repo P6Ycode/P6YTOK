@@ -55,6 +55,9 @@ static UIColor *P6YRed(void) {
             [self segmentRow:@"When a video ends" detail:@"Choose replay, stop, or move to the next post" key:@"p6y_playback_action" options:@[@"Replay", @"Stop", @"Next"]],
             [self segmentRow:@"Startup page" detail:@"Select the first home feed tab" key:@"p6y_startup_page" options:@[@"For You", @"Following"]]
         ]},
+        @{ @"title": @"STORIES", @"rows": @[
+            [self switchRow:@"Posted and remaining time" detail:@"Shows the posted timestamp and a live countdown in 24-hour format. Uses TikTok's expiry time when available, otherwise 24 hours after posting." key:@"p6y_story_timer"]
+        ]},
         @{ @"title": @"LIVE", @"rows": @[
             [self switchRow:@"Pinch to zoom" detail:@"Clear the LIVE controls, then pinch anywhere to zoom from 1× to 4×. Two-finger double-tap resets." key:@"p6y_live_zoom"]
         ]},
@@ -76,7 +79,8 @@ static UIColor *P6YRed(void) {
             [self switchRow:@"Confirm follows" detail:@"Ask before changing a follow relationship" key:@"p6y_confirm_follow"]
         ]},
         @{ @"title": @"ABOUT", @"rows": @[
-            @{ @"type": @"info", @"title": @"P6YTOK 0.1.4", @"detail": @"Adds locally observed follower gain/loss history for TikTok 46.1.0" },
+            @{ @"type": @"info", @"title": @"P6YTOK 0.1.5", @"detail": @"Adds story posted timestamps and live remaining-time countdowns for TikTok 46.1.0" },
+            @{ @"type": @"info", @"title": @"Story timing", @"detail": @"Posted time uses MM/dd HH:mm:ss and remaining time uses HH:mm:ss. TikTok's expiration timestamp is preferred when exposed." },
             @{ @"type": @"info", @"title": @"Follower timestamps", @"detail": @"Follower changes are measured between profile visits. Times show the observation window, not TikTok's exact individual follow or unfollow time." },
             @{ @"type": @"info", @"title": @"Quality behavior", @"detail": @"Uses the largest/original media variant TikTok exposes and writes original files to Photos without re-encoding" }
         ]}
