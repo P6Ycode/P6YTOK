@@ -741,12 +741,17 @@ static void P6YConfirmObjectAction(id object, id argument, const void *bypassKey
 %hook TTKCommentPanelViewController
 - (void)loadView {
     %orig;
-    if ([P6YManager boolForKey:@"p6y_transparent_comments"]) self.view.backgroundColor = [UIColor colorWithWhite:0 alpha:0.62];
+    UIView *panelView = ((UIViewController *)self).view;
+    if ([P6YManager boolForKey:@"p6y_transparent_comments"]) {
+        panelView.backgroundColor = [UIColor colorWithWhite:0 alpha:0.62];
+    }
 }
+
 - (void)viewDidLayoutSubviews {
     %orig;
     if (![P6YManager boolForKey:@"p6y_transparent_comments"]) return;
-    self.view.backgroundColor = [UIColor colorWithWhite:0 alpha:0.62];
+    UIView *panelView = ((UIViewController *)self).view;
+    panelView.backgroundColor = [UIColor colorWithWhite:0 alpha:0.62];
     UIView *archView = P6YGet(self, @"archView");
     UITableView *list = P6YGet(self, @"listTableView");
     archView.backgroundColor = UIColor.clearColor;
