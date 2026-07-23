@@ -28,6 +28,7 @@
         @"p6y_save_profile_photo": @YES,
         @"p6y_profile_follow_status": @NO,
         @"p6y_profile_video_count": @NO,
+        @"p6y_follower_tracker": @YES,
         @"p6y_profile_upload_date": @NO,
         @"p6y_profile_like_count": @NO,
         @"p6y_profile_unsensitive": @NO,
