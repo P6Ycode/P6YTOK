@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       ipa_url:
-        description: Direct URL to a decrypted TikTok 46.1.0 IPA (optional when P6YTOK_IPA_URL is configured as a repository secret)
+        description: Optional direct decrypted TikTok 46.1.0 IPA URL; otherwise the newest IPA in this repository's latest release is used
         required: false
         type: string
 
@@ -31,6 +31,52 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
 
+      - name: Resolve base IPA
+        id: ipa_input
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [[ -n "${IPA_URL:-}" ]]; then
+            echo "source=URL input or secret" >> "$GITHUB_OUTPUT"
+          else
+            RELEASE_JSON="$RUNNER_TEMP/latest-release.json"
+            curl --fail --silent --show-error --location \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/releases/latest" \
+              --output "$RELEASE_JSON"
+            IPA_URL="$(python3 - "$RELEASE_JSON" <<'PY'
+          import json
+          import sys
+
+          with open(sys.argv[1], "r", encoding="utf-8") as handle:
+              release = json.load(handle)
+
+          assets = [
+              asset for asset in release.get("assets", [])
+              if str(asset.get("name", "")).lower().endswith(".ipa")
+          ]
+          if not assets:
+              raise SystemExit("The latest release has no .ipa asset")
+
+          preferred = [
+              asset for asset in assets
+              if "46.1.0" in str(asset.get("name", ""))
+              or "461034" in str(asset.get("name", ""))
+              or "tiktok" in str(asset.get("name", "")).lower()
+          ]
+          selected = (preferred or assets)[0]
+          print(selected["browser_download_url"])
+          PY
+            )"
+            echo "IPA_URL=$IPA_URL" >> "$GITHUB_ENV"
+            echo "source=latest release asset" >> "$GITHUB_OUTPUT"
+          fi
+          echo "Base IPA source: $(cat "$GITHUB_OUTPUT" | tail -n 1 | cut -d= -f2-)" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Install build tools
         run: |
           brew update
@@ -47,13 +93,22 @@ jobs:
       - name: Build P6YTOK package
         run: |
           set -euo pipefail
-          rm -rf packages .theos
-          make clean package FINALPACKAGE=1
+          rm -rf packages .theos artifacts
+          mkdir -p "$GITHUB_WORKSPACE/artifacts"
+          make clean package FINALPACKAGE=1 2>&1 | tee "$GITHUB_WORKSPACE/artifacts/build.log"
           DEB="$(find "$GITHUB_WORKSPACE/packages" -type f -name '*.deb' -print | sort | tail -n 1)"
           test -n "$DEB"
-          mkdir -p "$GITHUB_WORKSPACE/artifacts"
           cp "$DEB" "$GITHUB_WORKSPACE/artifacts/P6YTOK_0.1.6_iphoneos-arm.deb"
           echo "DEB_PATH=$GITHUB_WORKSPACE/artifacts/P6YTOK_0.1.6_iphoneos-arm.deb" >> "$GITHUB_ENV"
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: P6YTOK-build-log
+          path: artifacts/build.log
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Upload tweak package
         uses: actions/upload-artifact@v4
@@ -63,25 +118,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Check for decrypted IPA input
-        id: ipa_input
-        shell: bash
-        run: |
-          if [[ -n "${IPA_URL:-}" ]]; then
-            echo "available=true" >> "$GITHUB_OUTPUT"
-            echo "A decrypted IPA URL is available; IPA packaging will run." >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "available=false" >> "$GITHUB_OUTPUT"
-            {
-              echo "## IPA packaging skipped"
-              echo
-              echo "The tweak package was built successfully, but GitHub Actions needs a decrypted TikTok 46.1.0 IPA to create the final IPA."
-              echo "Configure the repository secret \`P6YTOK_IPA_URL\` with a direct private download URL, or run this workflow manually and supply \`ipa_url\`."
-            } >> "$GITHUB_STEP_SUMMARY"
-          fi
-
       - name: Download and validate base IPA
-        if: steps.ipa_input.outputs.available == 'true'
         run: |
           set -euo pipefail
           BASE_IPA="$RUNNER_TEMP/TikTok_46.1.0_decrypted.ipa"
@@ -94,14 +131,14 @@ jobs:
           test -n "$APP_DIR"
           VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_DIR/Info.plist")"
           BUILD="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_DIR/Info.plist")"
-          if [[ "$VERSION" != "46.1.0" ]]; then
-            echo "Expected TikTok 46.1.0, received version $VERSION (build $BUILD)." >&2
+          BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_DIR/Info.plist")"
+          if [[ "$VERSION" != "46.1.0" || "$BUILD" != "461034" || "$BUNDLE_ID" != "com.zhiliaoapp.musically" ]]; then
+            echo "Expected TikTok 46.1.0 (461034), com.zhiliaoapp.musically; received $VERSION ($BUILD), $BUNDLE_ID." >&2
             exit 1
           fi
           echo "BASE_IPA=$BASE_IPA" >> "$GITHUB_ENV"
 
       - name: Install Azule injector
-        if: steps.ipa_input.outputs.available == 'true'
         run: |
           set -euo pipefail
           AZULE_DIR="$RUNNER_TEMP/Azule"
@@ -110,7 +147,6 @@ jobs:
           echo "AZULE_DIR=$AZULE_DIR" >> "$GITHUB_ENV"
 
       - name: Inject P6YTOK and create IPA
-        if: steps.ipa_input.outputs.available == 'true'
         run: |
           set -euo pipefail
           OUTPUT_DIR="$RUNNER_TEMP/p6ytok-output"
@@ -126,7 +162,6 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload IPA
-        if: steps.ipa_input.outputs.available == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: P6YTOK-TikTok-46.1.0-IPA
