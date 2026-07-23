@@ -36,11 +36,11 @@ static UIColor *P6YRed(void) {
     self.sections = @[
         @{ @"title": @"DOWNLOADS", @"rows": @[
             [self switchRow:@"Enable downloads" detail:@"Shows the P6YTOK media button" key:@"p6y_downloads_enabled"],
-            [self switchRow:@"Download videos" detail:@"Downloads the direct playback file without TikTok's watermark layer" key:@"p6y_download_video"],
-            [self switchRow:@"Download photo posts" detail:@"Saves every static photo in a post" key:@"p6y_download_photos"],
-            [self switchRow:@"Download music" detail:@"Exports the post audio through the share sheet" key:@"p6y_download_music"],
+            [self switchRow:@"Download videos" detail:@"Always selects TikTok's highest available direct video variant" key:@"p6y_download_video"],
+            [self switchRow:@"Download photo posts" detail:@"Saves every original photo file at full available quality, including batches" key:@"p6y_download_photos"],
+            [self switchRow:@"Download music" detail:@"Exports the original audio response through the share sheet" key:@"p6y_download_music"],
             [self switchRow:@"Copy description" detail:@"Adds Copy Description to the P6YTOK menu" key:@"p6y_copy_description"],
-            [self switchRow:@"Copy video link" detail:@"Copies the direct video media link" key:@"p6y_copy_video_link"],
+            [self switchRow:@"Copy video link" detail:@"Copies the selected highest-quality direct video link" key:@"p6y_copy_video_link"],
             [self switchRow:@"Copy music link" detail:@"Copies the direct audio link" key:@"p6y_copy_music_link"],
             [self switchRow:@"Download progress" detail:@"Shows a compact black-and-red progress bar" key:@"p6y_download_progress"],
             [self segmentRow:@"After downloading" detail:@"Music always opens the share sheet" key:@"p6y_download_destination" options:@[@"Photos", @"Share"]]
@@ -55,8 +55,13 @@ static UIColor *P6YRed(void) {
             [self segmentRow:@"When a video ends" detail:@"Choose replay, stop, or move to the next post" key:@"p6y_playback_action" options:@[@"Replay", @"Stop", @"Next"]],
             [self segmentRow:@"Startup page" detail:@"Select the first home feed tab" key:@"p6y_startup_page" options:@[@"For You", @"Following"]]
         ]},
+        @{ @"title": @"LIVE & STORIES", @"rows": @[
+            [self switchRow:@"LIVE pinch zoom" detail:@"Pinch anywhere on a LIVE video, including after clearing the display; double-tap with two fingers to reset" key:@"p6y_live_zoom"],
+            [self switchRow:@"Story time" detail:@"Shows posted time and remaining time using 24-hour HH:mm / HH:mm:ss formatting" key:@"p6y_story_time"]
+        ]},
         @{ @"title": @"PROFILE", @"rows": @[
-            [self switchRow:@"Save profile photo" detail:@"Long-press the profile-photo preview to save or share it" key:@"p6y_save_profile_photo"],
+            [self switchRow:@"Save profile photo" detail:@"Long-press the profile-photo preview to fetch the highest-quality available avatar" key:@"p6y_save_profile_photo"],
+            [self switchRow:@"Follower change history" detail:@"Shows gains or losses since the last visit and stores observed timestamps locally" key:@"p6y_profile_follower_history"],
             [self switchRow:@"Follow status" detail:@"Shows relationship status in a small P6YTOK profile badge" key:@"p6y_profile_follow_status"],
             [self switchRow:@"Video count" detail:@"Shows the visible post count in the profile badge" key:@"p6y_profile_video_count"],
             [self switchRow:@"Upload date" detail:@"Shows the date on profile thumbnails" key:@"p6y_profile_upload_date"],
@@ -65,18 +70,19 @@ static UIColor *P6YRed(void) {
             [self switchRow:@"Extend bio limit" detail:@"Raises the local editor limit to 222 characters" key:@"p6y_extend_bio"],
             [self switchRow:@"Extend comment limit" detail:@"Raises the local editor limit to 240 characters" key:@"p6y_extend_comment"]
         ]},
+        @{ @"title": @"LIKED POSTS", @"rows": @[
+            [self switchRow:@"Selection tools" detail:@"Detects returned unavailable placeholders, selects loaded liked posts, and batch-downloads valid media at full quality" key:@"p6y_liked_post_tools"],
+            @{ @"type": @"info", @"title": @"Removal safety", @"detail": @"TikTok 46.1.0 has a confirmed remove-unavailable API for Favorites, not a confirmed bulk-unlike API for Likes. P6YTOK does not call an unverified endpoint." }
+        ]},
         @{ @"title": @"CONFIRMATIONS", @"rows": @[
             [self switchRow:@"Confirm likes" detail:@"Ask before liking a post" key:@"p6y_confirm_like"],
             [self switchRow:@"Confirm comment likes" detail:@"Ask before liking a comment" key:@"p6y_confirm_comment_like"],
             [self switchRow:@"Confirm comment dislikes" detail:@"Ask before disliking a comment" key:@"p6y_confirm_comment_dislike"],
             [self switchRow:@"Confirm follows" detail:@"Ask before changing a follow relationship" key:@"p6y_confirm_follow"]
         ]},
-        @{ @"title": @"SECURITY", @"rows": @[
-            [self switchRow:@"Lock P6YTOK" detail:@"Require Face ID, Touch ID, or the device passcode" key:@"p6y_app_lock"]
-        ]},
         @{ @"title": @"ABOUT", @"rows": @[
-            @{ @"type": @"info", @"title": @"P6YTOK 0.1.0", @"detail": @"Revival baseline for TikTok 46.1.0" },
-            @{ @"type": @"info", @"title": @"Black + Red", @"detail": @"No legacy branding, donation links, fake stats, region spoofing, or broad bypass hooks" }
+            @{ @"type": @"info", @"title": @"P6YTOK 0.2.0", @"detail": @"TikTok 46.1.0 full-quality media and profile/story tools" },
+            @{ @"type": @"info", @"title": @"Black + Red", @"detail": @"No biometric/passcode lock, legacy branding, fake stats, region spoofing, or broad bypass hooks" }
         ]}
     ];
 }
@@ -93,21 +99,11 @@ static UIColor *P6YRed(void) {
     [self dismissViewControllerAnimated:YES completion:nil];
 }
 
-- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
-    return self.sections.count;
-}
-
-- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    return [self.sections[section][@"rows"] count];
-}
-
-- (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
-    return self.sections[section][@"title"];
-}
-
+- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView { return self.sections.count; }
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section { return [self.sections[section][@"rows"] count]; }
+- (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section { return self.sections[section][@"title"]; }
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
-    if (section == self.sections.count - 1) return @"P6YTOK settings apply immediately.";
-    return nil;
+    return section == self.sections.count - 1 ? @"P6YTOK settings apply immediately." : nil;
 }
 
 - (UIView *)tableView:(UITableView *)tableView viewForHeaderInSection:(NSInteger)section {
@@ -127,7 +123,7 @@ static UIColor *P6YRed(void) {
     cell.textLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
     cell.detailTextLabel.text = row[@"detail"];
     cell.detailTextLabel.textColor = [UIColor colorWithWhite:0.62 alpha:1];
-    cell.detailTextLabel.numberOfLines = 3;
+    cell.detailTextLabel.numberOfLines = 4;
     cell.selectionStyle = UITableViewCellSelectionStyleNone;
 
     NSString *type = row[@"type"];
@@ -156,13 +152,11 @@ static UIColor *P6YRed(void) {
 }
 
 - (void)switchChanged:(UISwitch *)sender {
-    if (sender.accessibilityIdentifier.length == 0) return;
-    [[NSUserDefaults standardUserDefaults] setBool:sender.isOn forKey:sender.accessibilityIdentifier];
+    if (sender.accessibilityIdentifier.length) [NSUserDefaults.standardUserDefaults setBool:sender.isOn forKey:sender.accessibilityIdentifier];
 }
 
 - (void)segmentChanged:(UISegmentedControl *)sender {
-    if (sender.accessibilityIdentifier.length == 0) return;
-    [[NSUserDefaults standardUserDefaults] setInteger:sender.selectedSegmentIndex forKey:sender.accessibilityIdentifier];
+    if (sender.accessibilityIdentifier.length) [NSUserDefaults.standardUserDefaults setInteger:sender.selectedSegmentIndex forKey:sender.accessibilityIdentifier];
 }
 
 @end
