@@ -1,8 +1,8 @@
 Package: com.p6ycode.p6ytok
 Name: P6YTOK
-Version: 0.1.0
-Architecture: iphoneos-arm64
-Description: Black-and-red TikTok enhancements rebuilt for TikTok 46.1.0.
+Version: 0.2.0-alpha1
+Architecture: iphoneos-arm
+Description: P6YTOK revival for TikTok 46.1.0 with full-quality media, LIVE zoom, story time, and profile history.
 Maintainer: P6Ycode
 Author: P6Ycode
 Section: Tweaks
