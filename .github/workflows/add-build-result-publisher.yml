@@ -1,0 +1,117 @@
+name: Add P6YTOK build result publisher
+
+on:
+  push:
+    branches:
+      - revive-tiktok-46.1.0
+    paths:
+      - .github/workflows/add-build-result-publisher.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-workflow:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: revive-tiktok-46.1.0
+          fetch-depth: 0
+
+      - name: Add final result publisher
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          workflow = Path('.github/workflows/build-ipa.yml')
+          text = workflow.read_text(encoding='utf-8')
+          text = text.replace('permissions:\n  contents: read', 'permissions:\n  contents: write', 1)
+
+          marker = '      - name: Publish concise build result\n'
+          if marker not in text:
+              text = text.rstrip() + r'''
+
+      - name: Publish concise build result
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILD_STATUS: ${{ job.status }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          HEAD_SHA: ${{ github.sha }}
+          BRANCH_NAME: ${{ github.ref_name }}
+        run: |
+          python3 <<'PYRESULT'
+          import base64
+          import json
+          import os
+          import pathlib
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+
+          log_path = pathlib.Path('artifacts/build.log')
+          lines = log_path.read_text(errors='replace').splitlines() if log_path.exists() else []
+          markers = (' error:', 'fatal error:', 'undefined symbols', 'make[', "expected '", 'no usable base', 'curl:')
+          indexes = [i for i, line in enumerate(lines) if any(marker in line.lower() for marker in markers)]
+          relevant = []
+          for index in indexes[:10]:
+              relevant.extend(lines[max(0, index - 4):min(len(lines), index + 12)])
+              relevant.append('---')
+          if not relevant and lines:
+              relevant = lines[-100:]
+          relevant = relevant[:180]
+
+          report = '\n'.join([
+              f"Status: {os.environ['BUILD_STATUS']}",
+              f"Run: {os.environ['RUN_URL']}",
+              f"Source commit: {os.environ['HEAD_SHA']}",
+              '',
+              'Relevant output:',
+              *(relevant or ['No build log was created.']),
+              '',
+          ])
+
+          api = os.environ['GITHUB_API_URL']
+          repo = os.environ['GITHUB_REPOSITORY']
+          branch = os.environ['BRANCH_NAME']
+          path = '.github/last-build-result.txt'
+          url = f'{api}/repos/{repo}/contents/{path}'
+          headers = {
+              'Accept': 'application/vnd.github+json',
+              'Authorization': f"Bearer {os.environ['GH_TOKEN']}",
+              'X-GitHub-Api-Version': '2022-11-28',
+              'Content-Type': 'application/json',
+          }
+          sha = None
+          try:
+              request = urllib.request.Request(f'{url}?ref={urllib.parse.quote(branch)}', headers=headers)
+              with urllib.request.urlopen(request) as response:
+                  sha = json.load(response).get('sha')
+          except urllib.error.HTTPError as error:
+              if error.code != 404:
+                  raise
+
+          payload = {
+              'message': 'Record latest P6YTOK build result [skip ci]',
+              'branch': branch,
+              'content': base64.b64encode(report.encode()).decode(),
+          }
+          if sha:
+              payload['sha'] = sha
+          request = urllib.request.Request(url, data=json.dumps(payload).encode(), headers=headers, method='PUT')
+          with urllib.request.urlopen(request) as response:
+              json.load(response)
+          PYRESULT
+'''
+          workflow.write_text(text + '\n', encoding='utf-8')
+          Path('.github/workflows/add-build-result-publisher.yml').unlink()
+          PY
+
+      - name: Commit workflow update
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/workflows/build-ipa.yml .github/workflows/add-build-result-publisher.yml
+          git commit -m "Restore P6YTOK build result reporting"
+          git push origin HEAD:revive-tiktok-46.1.0
