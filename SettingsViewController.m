@@ -62,6 +62,7 @@ static UIColor *P6YRed(void) {
             [self switchRow:@"Save profile photo" detail:@"Long-press the profile-photo preview to fetch the highest-quality available avatar" key:@"p6y_save_profile_photo"],
             [self switchRow:@"Follow status" detail:@"Shows relationship status in a small P6YTOK profile badge" key:@"p6y_profile_follow_status"],
             [self switchRow:@"Video count" detail:@"Shows the visible post count in the profile badge" key:@"p6y_profile_video_count"],
+            [self switchRow:@"Follower gain/loss tracker" detail:@"Compares follower totals between profile visits, shows the observed change and timestamps, and keeps a tap-to-view history" key:@"p6y_follower_tracker"],
             [self switchRow:@"Upload date" detail:@"Shows the date on profile thumbnails" key:@"p6y_profile_upload_date"],
             [self switchRow:@"Like count" detail:@"Shows likes on profile thumbnails" key:@"p6y_profile_like_count"],
             [self switchRow:@"Hide sensitive-content masks" detail:@"Removes supported profile thumbnail masks" key:@"p6y_profile_unsensitive"],
@@ -75,7 +76,8 @@ static UIColor *P6YRed(void) {
             [self switchRow:@"Confirm follows" detail:@"Ask before changing a follow relationship" key:@"p6y_confirm_follow"]
         ]},
         @{ @"title": @"ABOUT", @"rows": @[
-            @{ @"type": @"info", @"title": @"P6YTOK 0.1.3", @"detail": @"Full-quality downloads, no app lock, and LIVE clear-mode zoom for TikTok 46.1.0" },
+            @{ @"type": @"info", @"title": @"P6YTOK 0.1.4", @"detail": @"Adds locally observed follower gain/loss history for TikTok 46.1.0" },
+            @{ @"type": @"info", @"title": @"Follower timestamps", @"detail": @"Follower changes are measured between profile visits. Times show the observation window, not TikTok's exact individual follow or unfollow time." },
             @{ @"type": @"info", @"title": @"Quality behavior", @"detail": @"Uses the largest/original media variant TikTok exposes and writes original files to Photos without re-encoding" }
         ]}
     ];
