@@ -23,6 +23,8 @@
         @"p6y_playback_action": @0,
         @"p6y_startup_page": @0,
 
+        @"p6y_live_zoom": @YES,
+
         @"p6y_save_profile_photo": @YES,
         @"p6y_profile_follow_status": @NO,
         @"p6y_profile_video_count": @NO,
