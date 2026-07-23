@@ -23,6 +23,8 @@
         @"p6y_playback_action": @0,
         @"p6y_startup_page": @0,
 
+        @"p6y_story_timer": @YES,
+
         @"p6y_live_zoom": @YES,
 
         @"p6y_save_profile_photo": @YES,
