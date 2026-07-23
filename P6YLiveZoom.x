@@ -1,6 +1,7 @@
 #import <UIKit/UIKit.h>
 #import <QuartzCore/QuartzCore.h>
 #import <objc/runtime.h>
+#import <string.h>
 #import "P6YManager.h"
 
 static const void *P6YLivePinchKey = &P6YLivePinchKey;

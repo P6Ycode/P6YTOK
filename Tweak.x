@@ -4,7 +4,6 @@
 #import "P6YManager.h"
 #import "P6YDownloadManager.h"
 #import "SettingsViewController.h"
-#import "SecurityViewController.h"
 
 @interface AppDelegate : NSObject <UIApplicationDelegate>
 @property (nonatomic, strong) UIWindow *window;
@@ -430,16 +429,6 @@ static void P6YUpdateProfileThumbnail(UIView *cell, id model) {
     [P6YManager cleanTemporaryDownloads];
     return result;
 }
-
-- (void)applicationDidBecomeActive:(UIApplication *)application {
-    %orig;
-    if (![P6YManager boolForKey:@"p6y_app_lock"]) return;
-    UIViewController *top = [P6YManager topViewController];
-    if ([top isKindOfClass:[SecurityViewController class]]) return;
-    SecurityViewController *lock = [[SecurityViewController alloc] init];
-    lock.modalPresentationStyle = UIModalPresentationFullScreen;
-    [top presentViewController:lock animated:NO completion:nil];
-}
 %end
 
 %hook TTKSettingsBaseCellPlugin
@@ -466,7 +455,7 @@ static void P6YUpdateProfileThumbnail(UIView *cell, id model) {
     TTKSettingsBaseCellPlugin *plugin = [[%c(TTKSettingsBaseCellPlugin) alloc] initWithPluginContext:self.context];
     AWESettingItemModel *item = [[%c(AWESettingItemModel) alloc] initWithIdentifier:@"p6ytok_settings"];
     item.title = @"P6YTOK";
-    item.detail = @"Downloads, feed, profile, and security";
+    item.detail = @"Downloads, feed, LIVE, profile, and tools";
     item.iconImage = [UIImage systemImageNamed:@"flame.fill"];
     item.type = 99;
     plugin.itemModel = item;
