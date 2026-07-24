@@ -1,0 +1,99 @@
+name: Build P6YTOK tweak artifacts
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "**/*.md"
+      - "README.md"
+  pull_request:
+    paths-ignore:
+      - "**/*.md"
+      - "README.md"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build tweak package
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          set -euo pipefail
+          brew update
+          brew install make ldid xz dpkg
+          git clone --recursive https://github.com/theos/theos.git "$HOME/theos"
+          echo "THEOS=$HOME/theos" >> "$GITHUB_ENV"
+
+      - name: Locate Theos project
+        id: locate
+        run: |
+          set -euo pipefail
+          makefile="$(find "$GITHUB_WORKSPACE" -maxdepth 4 -name Makefile -not -path "*/.git/*" | head -n 1)"
+          if [ -z "$makefile" ]; then
+            echo "No Theos Makefile was found in the repository." >&2
+            echo "Expected a tweak project with a Makefile within four directory levels." >&2
+            exit 1
+          fi
+          project_dir="$(dirname "$makefile")"
+          echo "project_dir=$project_dir" >> "$GITHUB_OUTPUT"
+          echo "Using project directory: $project_dir"
+
+      - name: Build package
+        working-directory: ${{ steps.locate.outputs.project_dir }}
+        env:
+          THEOS: ${{ env.THEOS }}
+          FINALPACKAGE: "1"
+          TARGET: iphone:clang:latest:14.0
+        run: |
+          set -euo pipefail
+          make clean
+          make package FINALPACKAGE=1
+
+      - name: Collect artifacts
+        working-directory: ${{ steps.locate.outputs.project_dir }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$GITHUB_WORKSPACE/dist/deb" "$GITHUB_WORKSPACE/dist/dylib" "$GITHUB_WORKSPACE/dist/layout"
+
+          find . -type f -path "*/packages/*.deb" -print -exec cp {} "$GITHUB_WORKSPACE/dist/deb/" \;
+
+          shopt -s nullglob
+          debs=("$GITHUB_WORKSPACE"/dist/deb/*.deb)
+          if [ ${#debs[@]} -eq 0 ]; then
+            echo "No .deb package was produced." >&2
+            exit 1
+          fi
+
+          for deb in "${debs[@]}"; do
+            out="$GITHUB_WORKSPACE/dist/layout/$(basename "$deb" .deb)"
+            mkdir -p "$out"
+            dpkg-deb -x "$deb" "$out"
+          done
+
+          find "$GITHUB_WORKSPACE/dist/layout" -type f -name "*.dylib" -print -exec cp {} "$GITHUB_WORKSPACE/dist/dylib/" \; || true
+
+          cat > "$GITHUB_WORKSPACE/dist/README.txt" <<'EOF'
+          This artifact contains compiled P6YTOK tweak outputs.
+
+          - deb/: jailbreak/rootless package output when the project builds one.
+          - dylib/: extracted dynamic libraries, useful for separate IPA packaging with a user-provided IPA.
+          - layout/: unpacked package layout for inspection.
+
+          The workflow does not download, include, or distribute a TikTok IPA. Use only IPAs and signing assets you are allowed to use.
+          EOF
+
+      - name: Upload tweak artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: p6ytok-tweak-artifacts
+          path: dist/
+          if-no-files-found: error
