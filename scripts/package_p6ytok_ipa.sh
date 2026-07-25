@@ -11,14 +11,10 @@ Usage:
     --output P6YTOK-login-safe-unsigned.ipa \
     [--layout unpacked-deb-layout]
 
-The script:
-  1. Unpacks a user-provided decrypted TikTok IPA.
-  2. Copies the login-safe bootstrap and delayed feature payload into Frameworks/.
-  3. Copies tweak resource bundles/frameworks from an optional unpacked .deb layout.
-  4. Adds an LC_LOAD_DYLIB command for P6YBootstrap.dylib using LIEF.
-  5. Removes stale signatures and repacks an unsigned IPA.
-
-The output still needs to be signed with your own signing tool/profile.
+The script unpacks a user-provided decrypted TikTok IPA, embeds the login-safe
+bootstrap and delayed payload, adds the bootstrap LC_LOAD_DYLIB command with
+LIEF, removes stale signatures, verifies the modified Mach-O, and repacks an
+unsigned IPA. The output must still be signed before installation.
 EOF
 }
 
@@ -57,21 +53,45 @@ if [ -n "$layout" ] && [ ! -d "$layout" ]; then
   exit 1
 fi
 
+for command_name in python3 unzip zip; do
+  if ! command -v "$command_name" >/dev/null 2>&1; then
+    echo "Required command is missing: $command_name" >&2
+    exit 1
+  fi
+done
+
 if ! python3 -c 'import lief' >/dev/null 2>&1; then
-  echo "Python package 'lief' is required. Install it with: python3 -m pip install lief" >&2
+  echo "Python package 'lief' is required." >&2
   exit 1
 fi
 
-workdir="$(mktemp -d)"
-trap 'rm -rf "$workdir"' EXIT
+ipa="$(cd "$(dirname "$ipa")" && pwd)/$(basename "$ipa")"
+bootstrap="$(cd "$(dirname "$bootstrap")" && pwd)/$(basename "$bootstrap")"
+payload="$(cd "$(dirname "$payload")" && pwd)/$(basename "$payload")"
 mkdir -p "$(dirname "$output")"
 output="$(cd "$(dirname "$output")" && pwd)/$(basename "$output")"
 
-unzip -q "$ipa" -d "$workdir/unpacked"
-app_dir="$(find "$workdir/unpacked/Payload" -maxdepth 1 -type d -name '*.app' | head -n 1)"
+if [ "$ipa" = "$output" ]; then
+  echo "Output IPA must not overwrite the input IPA." >&2
+  exit 1
+fi
 
-if [ -z "$app_dir" ]; then
-  echo "No .app bundle found inside IPA Payload." >&2
+unzip -tq "$ipa" >/dev/null
+
+workdir="$(mktemp -d)"
+trap 'rm -rf "$workdir"' EXIT
+unzip -q "$ipa" -d "$workdir/unpacked"
+
+shopt -s nullglob
+app_dirs=("$workdir"/unpacked/Payload/*.app)
+if [ ${#app_dirs[@]} -ne 1 ]; then
+  echo "Expected exactly one .app bundle in Payload; found ${#app_dirs[@]}." >&2
+  exit 1
+fi
+app_dir="${app_dirs[0]}"
+
+if [ ! -f "$app_dir/Info.plist" ]; then
+  echo "App bundle is missing Info.plist: $app_dir" >&2
   exit 1
 fi
 
@@ -91,10 +111,22 @@ if [ -n "$layout" ]; then
     rm -rf "$frameworks_dir/$(basename "$framework")"
     cp -R "$framework" "$frameworks_dir/"
   done < <(find "$layout" -type d -name '*.framework' -print0)
+
+  while IFS= read -r -d '' auxiliary_dylib; do
+    auxiliary_name="$(basename "$auxiliary_dylib")"
+    case "$auxiliary_name" in
+      P6YBootstrap.dylib|"$(basename "$payload")") continue ;;
+    esac
+    cp "$auxiliary_dylib" "$frameworks_dir/$auxiliary_name"
+    chmod 0755 "$frameworks_dir/$auxiliary_name"
+  done < <(find "$layout" -type f -name '*.dylib' -print0)
 fi
 
-rm -rf "$app_dir/_CodeSignature" "$app_dir/SC_Info"
-rm -f "$app_dir/embedded.mobileprovision"
+while IFS= read -r -d '' signature_dir; do
+  rm -rf "$signature_dir"
+done < <(find "$app_dir" -type d -name '_CodeSignature' -print0)
+find "$app_dir" -type f \( -name 'CodeResources' -o -name 'embedded.mobileprovision' \) -delete
+rm -rf "$app_dir/SC_Info"
 
 python3 - "$app_dir" <<'PY'
 from pathlib import Path
@@ -118,24 +150,37 @@ if not executable.is_file():
 
 original_mode = stat.S_IMODE(executable.stat().st_mode)
 load_path = "@executable_path/Frameworks/P6YBootstrap.dylib"
-parsed = lief.MachO.parse(str(executable))
+config = lief.MachO.ParserConfig.deep
+parsed = lief.MachO.parse(str(executable), config=config)
 if parsed is None:
     raise SystemExit(f"LIEF could not parse Mach-O executable: {executable}")
 
-binaries = list(parsed) if isinstance(parsed, lief.MachO.FatBinary) else [parsed]
+binaries = list(parsed)
+if not binaries:
+    raise SystemExit(f"LIEF returned no Mach-O slices for: {executable}")
+
 for binary in binaries:
-    try:
-        binary.remove_signature()
-    except Exception:
-        # Some decrypted inputs already have no LC_CODE_SIGNATURE.
-        pass
-
+    binary.remove_signature()
     if binary.find_library(load_path) is None:
-        if binary.add_library(load_path) is None:
-            raise SystemExit(f"Could not add LC_LOAD_DYLIB to architecture {binary.header.cpu_type}")
+        command = binary.add_library(load_path)
+        if command is None:
+            raise SystemExit(
+                f"Could not add LC_LOAD_DYLIB to architecture {binary.header.cpu_type}"
+            )
 
-parsed.write(str(executable))
+temporary = executable.with_name(executable.name + ".p6ytmp")
+parsed.write(str(temporary))
+os.replace(temporary, executable)
 os.chmod(executable, original_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
+verified = lief.MachO.parse(str(executable), config=config)
+if verified is None:
+    raise SystemExit("LIEF could not reparse the modified executable")
+for binary in verified:
+    if binary.find_library(load_path) is None:
+        raise SystemExit(
+            f"LC_LOAD_DYLIB verification failed for architecture {binary.header.cpu_type}"
+        )
 
 for dylib in (app / "Frameworks").glob("*.dylib"):
     os.chmod(dylib, 0o755)
@@ -143,8 +188,8 @@ for dylib in (app / "Frameworks").glob("*.dylib"):
 print(f"Injected {load_path} into {executable_name}")
 PY
 
+executable_name="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app_dir/Info.plist")"
 if command -v otool >/dev/null 2>&1; then
-  executable_name="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app_dir/Info.plist")"
   if ! otool -L "$app_dir/$executable_name" | grep -Fq '@executable_path/Frameworks/P6YBootstrap.dylib'; then
     echo "Injection verification failed: LC_LOAD_DYLIB is missing." >&2
     exit 1
@@ -160,9 +205,27 @@ The bootstrap remains in login-safe mode until normal TikTok UI appears, then lo
 This IPA is unsigned. Sign it using your own certificate/profile or signing service before installation.
 EOF
 
+rm -f "$output"
 (
   cd "$workdir/unpacked"
-  zip -qry "$output" Payload README-P6YTOK.txt
+  zip -qry "$output" . -x '*.DS_Store'
 )
 
-echo "Built unsigned injected IPA: $output"
+unzip -tq "$output" >/dev/null
+verify_root="$workdir/verify"
+unzip -q "$output" -d "$verify_root"
+verify_apps=("$verify_root"/Payload/*.app)
+if [ ${#verify_apps[@]} -ne 1 ]; then
+  echo "Final IPA verification found ${#verify_apps[@]} app bundles." >&2
+  exit 1
+fi
+verify_app="${verify_apps[0]}"
+test -f "$verify_app/Frameworks/P6YBootstrap.dylib"
+test -f "$verify_app/Frameworks/$(basename "$payload")"
+
+if command -v otool >/dev/null 2>&1; then
+  verify_executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$verify_app/Info.plist")"
+  otool -L "$verify_app/$verify_executable" | grep -Fq '@executable_path/Frameworks/P6YBootstrap.dylib'
+fi
+
+echo "Built and verified unsigned injected IPA: $output"
