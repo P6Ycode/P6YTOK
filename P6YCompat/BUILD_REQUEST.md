@@ -13,4 +13,4 @@ Requested path:
 
 The workflow is configured for pushes to `main` and `agent/login-safe-compat`.
 
-Main branch publication requested from commit `2fd8d444e0878ed5ad3d676656a133d8dd56100e`.
+Explicit main-branch build trigger: July 25, 2026.
