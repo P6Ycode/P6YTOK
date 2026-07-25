@@ -1,0 +1,8 @@
+Package: com.p6ycode.p6ytok
+Name: P6YTOK
+Version: 0.1.0
+Architecture: iphoneos-arm64
+Description: IPA-injected login-safe P6YTOK test payload
+Maintainer: P6Ycode
+Author: P6Ycode
+Section: Tweaks
