@@ -1,23 +1,48 @@
 #import "P6YCompatCore.h"
+#import "P6YFeaturePayloadName.h"
+#import <dlfcn.h>
 
-static BOOL p6yCompatGroupsInitialized = NO;
+static BOOL p6yCompatPayloadLoadAttempted = NO;
+static void *p6yCompatPayloadHandle = NULL;
 
-static void P6YCompatInitDelayedGroups(void) {
-    if (p6yCompatGroupsInitialized || !P6YCompatAreDelayedFeatureGroupsEnabled()) {
+static NSString *P6YCompatFeaturePayloadPath(void) {
+    NSString *bundlePath = NSBundle.mainBundle.bundlePath ?: @"";
+    NSArray<NSString *> *candidates = @[
+        [[bundlePath stringByAppendingPathComponent:@"Frameworks"] stringByAppendingPathComponent:P6Y_FEATURE_DYLIB_NAME],
+        [bundlePath stringByAppendingPathComponent:P6Y_FEATURE_DYLIB_NAME]
+    ];
+
+    for (NSString *candidate in candidates) {
+        if ([[NSFileManager defaultManager] fileExistsAtPath:candidate]) {
+            return candidate;
+        }
+    }
+
+    return candidates.firstObject;
+}
+
+static void P6YCompatLoadFeaturePayload(void) {
+    if (p6yCompatPayloadLoadAttempted || !P6YCompatAreDelayedFeatureGroupsEnabled()) {
         return;
     }
 
-    p6yCompatGroupsInitialized = YES;
-    P6YCompatLog(@"delayed group coordinator fired");
+    p6yCompatPayloadLoadAttempted = YES;
 
-    // Move existing feature groups here as they are migrated.
-    //
-    // Example:
-    // if (P6YCompatShouldRunFeatureGroup(P6YCompatFeatureGroupDownloads)) {
-    //     %init(P6YDownloads);
-    // }
-    //
-    // Keep login/auth/security-sensitive hooks out of this file.
+    NSString *payloadPath = P6YCompatFeaturePayloadPath();
+    if (![[NSFileManager defaultManager] fileExistsAtPath:payloadPath]) {
+        P6YCompatLog(@"feature payload missing at %@", payloadPath);
+        return;
+    }
+
+    dlerror();
+    p6yCompatPayloadHandle = dlopen(payloadPath.fileSystemRepresentation, RTLD_NOW | RTLD_GLOBAL);
+    if (!p6yCompatPayloadHandle) {
+        const char *error = dlerror();
+        P6YCompatLog(@"feature payload failed to load: %s", error ?: "unknown dlopen error");
+        return;
+    }
+
+    P6YCompatLog(@"feature payload loaded after login-safe startup: %@", P6Y_FEATURE_DYLIB_NAME);
 }
 
 %ctor {
@@ -26,7 +51,7 @@ static void P6YCompatInitDelayedGroups(void) {
                                                           object:nil
                                                            queue:[NSOperationQueue mainQueue]
                                                       usingBlock:^(__unused NSNotification *notification) {
-            P6YCompatInitDelayedGroups();
+            P6YCompatLoadFeaturePayload();
         }];
     }
 }
