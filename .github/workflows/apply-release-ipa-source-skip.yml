@@ -46,3 +46,5 @@ jobs:
           git add .github/workflows/build-login-safe-tweak.yml
           git commit -m "ci: exclude generated IPA from release source discovery"
           git push origin HEAD:main
+
+# Trigger the existing workflow after creation.
