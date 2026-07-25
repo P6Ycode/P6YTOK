@@ -4,12 +4,13 @@ set -euo pipefail
 repo_root="${1:-$(pwd)}"
 repo_root="$(cd "$repo_root" && pwd)"
 
-makefile="$(find "$repo_root" -maxdepth 6 -name Makefile -not -path '*/.git/*' -print | while read -r candidate; do
+makefile=""
+while IFS= read -r candidate; do
   if grep -Eq '^[[:space:]]*TWEAK_NAME[[:space:]]*[:+?]?=' "$candidate"; then
-    printf '%s\n' "$candidate"
+    makefile="$candidate"
     break
   fi
-done)"
+done < <(find "$repo_root" -maxdepth 6 -name Makefile -not -path '*/.git/*' -print)
 
 if [ -z "$makefile" ]; then
   echo "No Theos tweak Makefile with TWEAK_NAME was found under $repo_root" >&2
