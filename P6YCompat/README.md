@@ -1,109 +1,131 @@
 # P6YCompat Login-Safe Mode
 
-P6YCompat is the first-pass compatibility layer for the IPA-injected P6YTOK target.
+P6YCompat is the compatibility layer for the IPA-injected P6YTOK target.
 
-It is intentionally not a DouX-style all-in bypass port. The goal is narrower and safer:
+It is intentionally not a broad login, token, TLS, Keychain, device-ID, or server-integrity bypass. Its job is narrower: keep the existing tweak payload completely unloaded while TikTok is on login-sensitive UI, then load it only after normal app UI has been verified.
 
-1. Let the injected P6YTOK dylib load at TikTok startup.
-2. Keep tweak feature groups asleep while TikTok is on login, onboarding, verification, or account-recovery screens.
-3. Enable P6YTOK feature groups only after the normal TikTok app UI is visible.
-4. Log safe diagnostics about version, IPA-style injection, visible controller class names, and feature-group state.
+## Runtime architecture
+
+The IPA contains two dylibs:
+
+```text
+TikTok launches
+      ↓
+P6YBootstrap.dylib loads from an LC_LOAD_DYLIB command
+      ↓
+Bootstrap observes UIKit only
+      ↓
+Login / onboarding / verification runs without the legacy tweak payload
+      ↓
+Normal TikTok UI remains stable for the verification grace period
+      ↓
+Bootstrap dlopen()s the original P6YTOK feature dylib
+      ↓
+Existing tweak hooks initialize
+```
+
+This is stronger than adding guard checks inside every old hook: the feature dylib and its hooks do not exist in the process during initial login.
 
 ## Files
 
 - `P6YCompatCore.h` / `P6YCompatCore.m`
   - login-safe state
-  - delayed feature-group state
-  - TikTok version detection
-  - IPA-style injection detection
+  - strict login/main-UI classification
+  - two-second main-UI stability verification
+  - TikTok version and safe environment diagnostics
   - class/selector availability helpers
-  - safe logging
 
 - `P6YDelayedInit.xm`
-  - always-loaded Logos observer
-  - hooks `UIViewController viewDidAppear:` only to watch screen transitions
-  - flips out of login-safe mode when the visible controller looks like main TikTok UI
+  - the only always-loaded Logos observer
+  - hooks `UIViewController viewDidAppear:` to observe navigation
 
 - `P6YDelayedGroups.xm`
-  - coordinator that fires when delayed feature groups become eligible
-  - placeholder for `%init(P6YDownloads)`, `%init(P6YFeedUI)`, and other migrated groups
+  - locates the generated legacy feature payload name
+  - calls `dlopen(..., RTLD_NOW | RTLD_GLOBAL)` after verified main UI
+  - logs missing-payload and dynamic-loader errors
+
+- `P6YFeaturePayloadName.h`
+  - generated during CI with the original Theos target dylib name
 
 - `P6YFeatureGate.h`
-  - bridge helpers for existing hooks while moving them into delayed Logos groups
+  - retained for future per-feature controls after the basic two-dylib build is proven
 
 ## Build integration
 
-Add the compat files to the tweak target's source list:
+Run:
 
-```make
-P6YTOK_FILES += P6YCompat/P6YCompatCore.m P6YCompat/P6YDelayedInit.xm P6YCompat/P6YDelayedGroups.xm
+```bash
+scripts/wire_p6ycompat.sh .
 ```
 
-If the project still uses the original BHTikTok target name, use that variable instead:
+The script finds the actual Theos tweak Makefile, identifies its primary `TWEAK_NAME`, and converts the build into:
 
-```make
-BHTikTok_FILES += P6YCompat/P6YCompatCore.m P6YCompat/P6YDelayedInit.xm P6YCompat/P6YDelayedGroups.xm
+- the original target as the delayed feature payload
+- a new `P6YBootstrap` target containing the compat files
+
+When the source is compatible, the original payload is compiled with Logos' internal generator so the IPA does not require a jailbreak-only hook runtime. `%hookf` or an explicitly forced MobileSubstrate/libhooker generator is detected and reported as a blocking condition.
+
+The script changes the working-tree Makefile during CI; it does not need to commit a generated Makefile to the branch.
+
+## IPA packaging
+
+`scripts/package_p6ytok_ipa.sh` requires:
+
+- a user-provided decrypted TikTok IPA
+- `P6YBootstrap.dylib`
+- the original feature payload dylib
+- optional unpacked package resources
+- Python with LIEF installed
+
+It performs real Mach-O injection by adding:
+
+```text
+@executable_path/Frameworks/P6YBootstrap.dylib
 ```
 
-The repo connector did not expose the current source Makefile path during this pass, so this branch adds the module and integration instructions without guessing a build-file location.
+to TikTok's main executable, places both dylibs in `Frameworks/`, copies resource bundles/frameworks, removes stale signatures, and emits an unsigned injected IPA.
 
-## Moving hooks to Option B delayed groups
+The resulting IPA must still be signed with the user's own signing method before installation.
 
-Preferred shape:
+## Login and logout behavior
 
-```logos
-#import "P6YCompat/P6YCompatCore.h"
+The feature payload is loaded only once per process. A dynamic library cannot be safely treated as fully removable after its hooks initialize.
 
-%group P6YDownloads
+Therefore:
 
-%hook SomeTikTokDownloadClass
-// existing download hook body
-%end
+- initial launch and login occur with only the bootstrap loaded
+- after normal UI is verified, the feature payload loads
+- after logging out, fully close and relaunch TikTok before attempting another login
 
-%end
-```
-
-Then initialize that group from `P6YDelayedGroups.xm` only after `P6YCompatDidEnableFeatureGroupsNotification` fires:
-
-```logos
-if (P6YCompatShouldRunFeatureGroup(P6YCompatFeatureGroupDownloads)) {
-    %init(P6YDownloads);
-}
-```
-
-For hooks that cannot be moved immediately, use `P6YFeatureGate.h` as a bridge:
-
-```logos
-#import "P6YCompat/P6YFeatureGate.h"
-
-%hook SomeExistingFeedClass
-- (void)someMethod {
-    if (!P6Y_COMPAT_CAN_RUN_FEED_UI()) {
-        return %orig;
-    }
-
-    // existing tweak behavior
-}
-%end
-```
-
-This bridge is less clean than delayed `%group` initialization, but it keeps the first migration manageable.
+That restart returns the process to bootstrap-only login-safe mode.
 
 ## Runtime flags
 
-All flags live in `NSUserDefaults` and default to login-safe behavior.
+All flags live in `NSUserDefaults`.
 
 | Key | Default | Purpose |
 | --- | --- | --- |
-| `P6YCompatEnabled` | `YES` | Master switch for the compat layer. |
-| `P6YCompatForceLoginSafeMode` | `NO` | Keeps all delayed feature groups off even after main UI detection. |
-| `P6YCompatManualFeatureEnable` | `NO` | Allows manually enabling delayed groups without main-UI detection. Useful for early test builds. |
+| `P6YCompatEnabled` | `YES` | Master switch for the compatibility layer. |
+| `P6YCompatForceLoginSafeMode` | `NO` | Prevents the feature payload from loading. |
+| `P6YCompatManualFeatureEnable` | `NO` | Bypasses automatic UI classification for controlled debugging only. |
 | `P6YCompatDebugLogging` | `YES` | Emits safe controller/version/state logs through `os_log`. |
-| `P6YCompatGroup.<group>.enabled` | `YES` | Per-group feature toggle, where `<group>` is `settings`, `downloads`, `feed-ui`, `profile`, `ad-filtering`, or `browser-redirects`. |
+
+## Build outputs
+
+The workflow uploads diagnostics even when a later step fails:
+
+- resolved Makefile
+- source file map
+- wire-script output and selected Logos generator
+- complete `make package` log
+- file architecture reports
+- `otool -L` dependency reports
+- generated `.deb` / dylibs when compilation succeeds
+- unsigned injected IPA when a user-provided IPA URL was supplied
 
 ## Explicit non-goals
 
-This module does not hook or alter:
+This module does not hook, inspect, or alter:
 
 - Keychain
 - Apple Passwords / password autofill
@@ -116,5 +138,6 @@ This module does not hook or alter:
 - install identifiers
 - carrier state
 - region state
+- App Store receipts or server-side attestation
 
-Those areas are deliberately out of scope for the IPA login-safe build.
+Those areas remain out of scope for the IPA login-safe build.
