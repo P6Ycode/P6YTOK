@@ -9,6 +9,10 @@
             <string>com.zhiliaoapp.musically</string>
             <string>com.ss.iphone.ugc.Aweme</string>
         </array>
+        <key>Executables</key>
+        <array>
+            <string>TikTok</string>
+        </array>
     </dict>
 </dict>
 </plist>
