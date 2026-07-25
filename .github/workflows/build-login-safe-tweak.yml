@@ -279,6 +279,8 @@ jobs:
                   continue
               for asset in release.get("assets", []):
                   name = asset.get("name", "")
+                  if name == "P6YTOK-login-safe-unsigned.ipa":
+                      continue
                   matches = name == requested_name if requested_name else name.lower().endswith(".ipa")
                   if matches:
                       selected = asset
