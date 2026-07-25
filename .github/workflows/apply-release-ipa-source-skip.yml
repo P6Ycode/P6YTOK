@@ -1,0 +1,48 @@
+name: Apply generated IPA source exclusion
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/apply-release-ipa-source-skip.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Exclude generated release IPA from source discovery
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('.github/workflows/build-login-safe-tweak.yml')
+          text = path.read_text(encoding='utf-8')
+          old = '''              for asset in release.get("assets", []):
+                  name = asset.get("name", "")
+                  matches = name == requested_name if requested_name else name.lower().endswith(".ipa")
+          '''
+          new = '''              for asset in release.get("assets", []):
+                  name = asset.get("name", "")
+                  if name == "P6YTOK-login-safe-unsigned.ipa":
+                      continue
+                  matches = name == requested_name if requested_name else name.lower().endswith(".ipa")
+          '''
+          if old not in text:
+              raise SystemExit('release IPA selector block did not match')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add .github/workflows/build-login-safe-tweak.yml
+          git commit -m "ci: exclude generated IPA from release source discovery"
+          git push origin HEAD:main
