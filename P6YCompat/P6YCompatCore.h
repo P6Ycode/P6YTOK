@@ -20,6 +20,10 @@ typedef NS_ENUM(NSInteger, P6YCompatFeatureGroup) {
 
 NS_ASSUME_NONNULL_BEGIN
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 extern NSString * const P6YCompatDidEnableFeatureGroupsNotification;
 extern NSString * const P6YCompatLoginSafeModeChangedNotification;
 
@@ -40,5 +44,9 @@ BOOL P6YCompatClassSelectorExists(NSString *className, SEL selector);
 
 NSString *P6YCompatFeatureGroupName(P6YCompatFeatureGroup group);
 void P6YCompatLog(NSString *format, ...) NS_FORMAT_FUNCTION(1, 2);
+
+#ifdef __cplusplus
+}
+#endif
 
 NS_ASSUME_NONNULL_END
