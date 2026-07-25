@@ -57,19 +57,36 @@ jobs:
             echo "$key=$value" >> "$GITHUB_OUTPUT"
           done
 
-          if [ "$(awk -F= '$1 == "payload_generator" {print $2; exit}' wire-output.txt)" != "internal" ]; then
-            echo "The legacy payload contains %hookf or forces a non-internal Logos generator." >&2
-            echo "That requires bundling a compatible hook runtime before this can be a self-contained IPA build." >&2
-            exit 1
-          fi
-
       - name: Record resolved project layout
+        if: always()
         run: |
           set -euo pipefail
-          mkdir -p dist/build
+          mkdir -p dist/build dist/reports
           find "$GITHUB_WORKSPACE" -maxdepth 7 -type f -not -path '*/.git/*' | sort > dist/build/source-files.txt
-          cp "${{ steps.wire.outputs.makefile }}" dist/build/ResolvedMakefile
-          cp wire-output.txt dist/build/
+
+          if [ -n "${{ steps.wire.outputs.makefile }}" ] && [ -f "${{ steps.wire.outputs.makefile }}" ]; then
+            cp "${{ steps.wire.outputs.makefile }}" dist/build/ResolvedMakefile
+          fi
+
+          if [ -f wire-output.txt ]; then
+            cp wire-output.txt dist/build/
+          fi
+
+          {
+            echo "target_name=${{ steps.wire.outputs.target_name }}"
+            echo "payload_dylib=${{ steps.wire.outputs.payload_dylib }}"
+            echo "bootstrap_dylib=${{ steps.wire.outputs.bootstrap_dylib }}"
+            echo "payload_generator=${{ steps.wire.outputs.payload_generator }}"
+          } > dist/reports/build-resolution.txt
+
+      - name: Verify self-contained Logos runtime
+        run: |
+          set -euo pipefail
+          if [ "${{ steps.wire.outputs.payload_generator }}" != "internal" ]; then
+            echo "The legacy payload contains %hookf or forces a non-internal Logos generator." >&2
+            echo "A compatible hook runtime must be bundled before this can be a self-contained IPA build." >&2
+            exit 1
+          fi
 
       - name: Build bootstrap and delayed feature payload
         working-directory: ${{ steps.wire.outputs.project_dir }}
@@ -80,7 +97,7 @@ jobs:
         run: |
           set -euo pipefail
           make clean
-          make package FINALPACKAGE=1
+          make package FINALPACKAGE=1 2>&1 | tee "$GITHUB_WORKSPACE/dist/build/make-package.log"
 
       - name: Collect and validate tweak artifacts
         working-directory: ${{ steps.wire.outputs.project_dir }}
@@ -141,7 +158,8 @@ jobs:
           - dylib/P6YBootstrap.dylib: inject this into TikTok's main executable.
           - dylib/${{ steps.wire.outputs.payload_dylib }}: copied beside the bootstrap and loaded only after verified normal TikTok UI appears.
           - layout/: unpacked Theos package, including resource bundles.
-          - reports/: resolved Makefile, source list, architecture, and dependency reports.
+          - reports/: resolved Makefile, source list, architecture, dependency, and build-resolution reports.
+          - build/make-package.log: complete Theos build output.
           - scripts/package_p6ytok_ipa.sh: builds an unsigned injected IPA from a user-provided decrypted IPA.
 
           No TikTok IPA, certificate, provisioning profile, password, token, or account data is stored in this artifact.
@@ -160,7 +178,8 @@ jobs:
             --bootstrap "$GITHUB_WORKSPACE/dist/dylib/P6YBootstrap.dylib" \
             --payload "$GITHUB_WORKSPACE/dist/dylib/${{ steps.wire.outputs.payload_dylib }}" \
             --layout "$layout" \
-            --output "$GITHUB_WORKSPACE/dist/ipa/P6YTOK-login-safe-unsigned.ipa"
+            --output "$GITHUB_WORKSPACE/dist/ipa/P6YTOK-login-safe-unsigned.ipa" \
+            2>&1 | tee "$GITHUB_WORKSPACE/dist/build/package-ipa.log"
 
       - name: Upload login-safe artifacts
         if: always()
