@@ -4,7 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       ipa_url:
-        description: "Optional direct URL to a user-provided decrypted TikTok IPA"
+        description: "Optional direct URL override for a user-provided decrypted TikTok IPA"
+        required: false
+        default: ""
+      release_asset_name:
+        description: "Optional exact .ipa asset name from this repository's Releases"
         required: false
         default: ""
   push:
@@ -17,7 +21,7 @@ permissions:
 
 jobs:
   build:
-    name: Build bootstrap, delayed payload, and optional unsigned IPA
+    name: Build bootstrap, delayed payload, and unsigned IPA
     runs-on: macos-15
 
     steps:
@@ -156,31 +160,149 @@ jobs:
           cat > "$GITHUB_WORKSPACE/dist/README.txt" <<EOF
           This artifact contains the login-safe two-dylib P6YTOK build.
 
-          - dylib/P6YBootstrap.dylib: inject this into TikTok's main executable.
+          - dylib/P6YBootstrap.dylib: injected into TikTok's main executable.
           - dylib/${{ steps.wire.outputs.payload_dylib }}: copied beside the bootstrap and loaded only after verified normal TikTok UI appears.
+          - ipa/P6YTOK-login-safe-unsigned.ipa: unsigned injected IPA built from the release asset.
           - layout/: unpacked Theos package, including resource bundles.
-          - reports/: resolved Makefile, source list, architecture, dependency, and build-resolution reports.
+          - reports/: resolved Makefile, source list, architecture, dependency, IPA source, and build-resolution reports.
           - build/make-package.log: complete Theos build output.
-          - scripts/package_p6ytok_ipa.sh: builds an unsigned injected IPA from a user-provided decrypted IPA.
+          - build/package-ipa.log: complete IPA packaging output.
 
-          No TikTok IPA, certificate, provisioning profile, password, token, or account data is stored in this artifact.
+          The generated IPA still needs to be signed before installation.
           EOF
 
-      - name: Optional user-provided IPA packaging
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.ipa_url != '' }}
+      - name: Resolve decrypted TikTok IPA
+        id: ipa
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_IPA_URL: ${{ inputs.ipa_url }}
+          REQUESTED_RELEASE_ASSET: ${{ inputs.release_asset_name }}
         run: |
           set -euo pipefail
-          mkdir -p "$GITHUB_WORKSPACE/dist/ipa"
-          curl --fail --location --retry 3 "${{ inputs.ipa_url }}" -o "$GITHUB_WORKSPACE/user-provided.ipa"
+          mkdir -p "$GITHUB_WORKSPACE/dist/ipa" "$GITHUB_WORKSPACE/dist/reports"
+          ipa="$GITHUB_WORKSPACE/user-provided.ipa"
+          source_kind=""
+          source_name=""
+          release_tag=""
+
+          if [ -n "${REQUESTED_IPA_URL:-}" ]; then
+            source_kind="manual-url"
+            source_name="user-provided.ipa"
+            curl --fail --location --retry 3 "$REQUESTED_IPA_URL" -o "$ipa"
+          else
+            releases_json="$RUNNER_TEMP/p6y-releases.json"
+            selection_json="$RUNNER_TEMP/p6y-ipa-selection.json"
+
+            curl --fail --location --retry 3 \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+              -o "$releases_json"
+
+            python3 - "$REQUESTED_RELEASE_ASSET" "$releases_json" "$selection_json" <<'PY'
+          import json
+          import sys
+
+          requested_name, releases_path, selection_path = sys.argv[1:]
+          with open(releases_path, "r", encoding="utf-8") as handle:
+              releases = json.load(handle)
+
+          selected = None
+          selected_release = None
+
+          for release in releases:
+              if release.get("draft"):
+                  continue
+              for asset in release.get("assets", []):
+                  name = asset.get("name", "")
+                  matches = name == requested_name if requested_name else name.lower().endswith(".ipa")
+                  if matches:
+                      selected = asset
+                      selected_release = release
+                      break
+              if selected:
+                  break
+
+          if not selected:
+              suffix = f" named {requested_name!r}" if requested_name else ""
+              raise SystemExit(f"No published .ipa release asset{suffix} was found.")
+
+          with open(selection_path, "w", encoding="utf-8") as handle:
+              json.dump(
+                  {
+                      "asset_api_url": selected["url"],
+                      "asset_name": selected["name"],
+                      "release_tag": selected_release.get("tag_name", ""),
+                  },
+                  handle,
+              )
+          PY
+
+            asset_api_url="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["asset_api_url"])' "$selection_json")"
+            source_name="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["asset_name"])' "$selection_json")"
+            release_tag="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["release_tag"])' "$selection_json")"
+            source_kind="github-release"
+
+            curl --fail --location --retry 3 \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/octet-stream" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "$asset_api_url" \
+              -o "$ipa"
+          fi
+
+          unzip -tq "$ipa"
+
+          metadata_dir="$RUNNER_TEMP/p6y-ipa-metadata"
+          rm -rf "$metadata_dir"
+          mkdir -p "$metadata_dir"
+          unzip -q "$ipa" 'Payload/*.app/Info.plist' -d "$metadata_dir"
+
+          info_plist="$(find "$metadata_dir/Payload" -type f -path '*.app/Info.plist' | head -n 1)"
+          if [ -z "$info_plist" ]; then
+            echo "The selected IPA has no Payload/*.app/Info.plist." >&2
+            exit 1
+          fi
+
+          app_version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$info_plist")"
+          bundle_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$info_plist")"
+          executable_name="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$info_plist")"
+
+          if [ "$app_version" != "46.1.0" ]; then
+            echo "Expected TikTok 46.1.0, but the release IPA reports version $app_version." >&2
+            exit 1
+          fi
+
+          {
+            echo "source_kind=$source_kind"
+            echo "source_name=$source_name"
+            echo "release_tag=$release_tag"
+            echo "version=$app_version"
+            echo "bundle_id=$bundle_id"
+            echo "executable=$executable_name"
+          } | tee "$GITHUB_WORKSPACE/dist/reports/ipa-source.txt"
+
+          echo "ipa_path=$ipa" >> "$GITHUB_OUTPUT"
+          echo "source_name=$source_name" >> "$GITHUB_OUTPUT"
+          echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
+
+      - name: Build unsigned injected IPA
+        run: |
+          set -euo pipefail
           chmod +x "$GITHUB_WORKSPACE/scripts/package_p6ytok_ipa.sh"
           layout="$(find "$GITHUB_WORKSPACE/dist/layout" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
+
           "$GITHUB_WORKSPACE/scripts/package_p6ytok_ipa.sh" \
-            --ipa "$GITHUB_WORKSPACE/user-provided.ipa" \
+            --ipa "${{ steps.ipa.outputs.ipa_path }}" \
             --bootstrap "$GITHUB_WORKSPACE/dist/dylib/P6YBootstrap.dylib" \
             --payload "$GITHUB_WORKSPACE/dist/dylib/${{ steps.wire.outputs.payload_dylib }}" \
             --layout "$layout" \
             --output "$GITHUB_WORKSPACE/dist/ipa/P6YTOK-login-safe-unsigned.ipa" \
             2>&1 | tee "$GITHUB_WORKSPACE/dist/build/package-ipa.log"
+
+          shasum -a 256 "$GITHUB_WORKSPACE/dist/ipa/P6YTOK-login-safe-unsigned.ipa" \
+            | tee "$GITHUB_WORKSPACE/dist/reports/ipa-sha256.txt"
 
       - name: Upload login-safe artifacts
         if: always()
