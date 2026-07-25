@@ -53,3 +53,5 @@ jobs:
           git add .github/workflows/build-login-safe-tweak.yml
           git commit -m "ci: allow dylibs' own install names"
           git push origin HEAD:main
+
+# Existing workflow touch: trigger after initial creation.
