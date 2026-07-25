@@ -1,0 +1,171 @@
+name: Publish login-safe IPA release
+
+on:
+  workflow_run:
+    workflows:
+      - Build login-safe P6YTOK IPA artifacts
+    types:
+      - completed
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/publish-login-safe-ipa-release.yml
+
+permissions:
+  actions: read
+  contents: write
+  statuses: write
+
+jobs:
+  publish:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Resolve successful IPA build run
+        id: build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id || '' }}
+        run: |
+          set -euo pipefail
+
+          if [ "$EVENT_NAME" = "workflow_run" ] && [ -n "$WORKFLOW_RUN_ID" ]; then
+            run_id="$WORKFLOW_RUN_ID"
+          else
+            run_id="$(gh run list \
+              --repo "$GITHUB_REPOSITORY" \
+              --workflow build-login-safe-tweak.yml \
+              --branch main \
+              --status success \
+              --limit 1 \
+              --json databaseId \
+              --jq '.[0].databaseId')"
+          fi
+
+          if [ -z "$run_id" ] || [ "$run_id" = "null" ]; then
+            echo "No successful login-safe IPA workflow run was found." >&2
+            exit 1
+          fi
+
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+          echo "Using successful IPA build run $run_id"
+
+      - name: Download IPA build artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ steps.build.outputs.run_id }}
+        run: |
+          set -euo pipefail
+          rm -rf release-artifact
+          mkdir -p release-artifact
+          gh run download "$RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --name p6ytok-login-safe-artifacts \
+            --dir release-artifact
+
+      - name: Verify release IPA
+        id: ipa
+        run: |
+          set -euo pipefail
+          ipa="release-artifact/ipa/P6YTOK-login-safe-unsigned.ipa"
+          test -f "$ipa"
+          test -s "$ipa"
+          unzip -tq "$ipa" >/dev/null
+
+          size="$(stat -c%s "$ipa")"
+          sha256="$(sha256sum "$ipa" | awk '{print $1}')"
+          if [ "$size" -lt 1048576 ]; then
+            echo "IPA is unexpectedly small: $size bytes" >&2
+            exit 1
+          fi
+
+          cp "$ipa" P6YTOK-login-safe-unsigned.ipa
+          echo "size=$size" >> "$GITHUB_OUTPUT"
+          echo "sha256=$sha256" >> "$GITHUB_OUTPUT"
+          echo "Verified P6YTOK-login-safe-unsigned.ipa ($size bytes, SHA-256 $sha256)"
+
+      - name: Publish IPA as GitHub Release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: p6ytok-login-safe-unsigned
+          RELEASE_TITLE: P6YTOK Login-Safe Unsigned IPA
+          SOURCE_RUN_ID: ${{ steps.build.outputs.run_id }}
+          IPA_SIZE: ${{ steps.ipa.outputs.size }}
+          IPA_SHA256: ${{ steps.ipa.outputs.sha256 }}
+        run: |
+          set -euo pipefail
+
+          cat > release-notes.md <<EOF
+          Unsigned login-safe P6YTOK IPA for TikTok 46.1.0.
+
+          Source workflow run: $SOURCE_RUN_ID
+          File: P6YTOK-login-safe-unsigned.ipa
+          Size: $IPA_SIZE bytes
+          SHA-256: $IPA_SHA256
+
+          This IPA is unsigned and must be signed before installation.
+          EOF
+
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "$RELEASE_TITLE" \
+              --notes-file release-notes.md
+            gh release upload "$RELEASE_TAG" \
+              P6YTOK-login-safe-unsigned.ipa \
+              --repo "$GITHUB_REPOSITORY" \
+              --clobber
+          else
+            gh release create "$RELEASE_TAG" \
+              P6YTOK-login-safe-unsigned.ipa \
+              --repo "$GITHUB_REPOSITORY" \
+              --target main \
+              --title "$RELEASE_TITLE" \
+              --notes-file release-notes.md
+          fi
+
+          gh release view "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json url,assets \
+            --jq '{url: .url, assets: [.assets[].name]}'
+
+      - name: Report publisher status
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          RESULT: ${{ job.status }}
+        run: |
+          set -euo pipefail
+          case "$RESULT" in
+            success) state=success ;;
+            *) state=failure ;;
+          esac
+
+          payload="$(python3 - "$state" "$RUN_URL" "$RESULT" <<'PY'
+          import json
+          import sys
+
+          state, target_url, result = sys.argv[1:]
+          print(json.dumps({
+              "state": state,
+              "context": "release-ipa",
+              "description": f"IPA release publisher {result}"[:140],
+              "target_url": target_url,
+          }))
+          PY
+          )"
+
+          curl --fail-with-body --location --retry 3 \
+            -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/statuses/$HEAD_SHA" \
+            -d "$payload"
