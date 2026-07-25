@@ -14,15 +14,19 @@ on:
   push:
     branches:
       - main
-      - agent/login-safe-compat
 
 permissions:
   contents: read
+
+concurrency:
+  group: p6ytok-login-safe-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
     name: Build bootstrap, delayed payload, and unsigned IPA
     runs-on: macos-15
+    timeout-minutes: 45
 
     steps:
       - name: Checkout repository
@@ -48,19 +52,27 @@ jobs:
           bash -n scripts/wire_p6ycompat.sh
           bash -n scripts/package_p6ytok_ipa.sh
           plutil -lint P6YTOK.plist P6YBootstrap.plist
+          test "$(/usr/libexec/PlistBuddy -c 'Print :Filter:Executables:0' P6YTOK.plist)" = "TikTok"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :Filter:Executables:0' P6YBootstrap.plist)" = "TikTok"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :Filter:Bundles:0' P6YTOK.plist)" = "com.zhiliaoapp.musically"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :Filter:Bundles:0' P6YBootstrap.plist)" = "com.zhiliaoapp.musically"
           test -s Makefile
           test -s Tweak.x
           test -s control
+          grep -Fxq 'Architecture: iphoneos-arm64' control
           test -s P6YCompat/P6YCompatCore.m
           test -s P6YCompat/P6YCompatCore.h
           test -s P6YCompat/P6YDelayedInit.xm
           test -s P6YCompat/P6YDelayedGroups.xm
-          gmake --version | head -n 1
+          gmake --version | sed -n '1p'
           python3 - <<'PY'
+          from importlib.metadata import version
           import lief
-          print(f"LIEF version: {lief.__version__}")
-          if lief.__version__ != "1.0.0":
-              raise SystemExit(f"Unexpected LIEF version: {lief.__version__}")
+
+          installed = version("lief")
+          print(f"LIEF version: {installed}")
+          if installed != "1.0.0":
+              raise SystemExit(f"Unexpected LIEF version: {installed}")
           PY
 
       - name: Wire delayed payload and login-safe bootstrap
@@ -162,8 +174,8 @@ jobs:
             exit 1
           fi
 
-          bootstrap="$(find "$out" -type f -name '${{ steps.wire.outputs.bootstrap_dylib }}' | head -n 1)"
-          payload="$(find "$out" -type f -name '${{ steps.wire.outputs.payload_dylib }}' | head -n 1)"
+          bootstrap="$(find "$out" -type f -name '${{ steps.wire.outputs.bootstrap_dylib }}')"
+          payload="$(find "$out" -type f -name '${{ steps.wire.outputs.payload_dylib }}')"
 
           for filter_name in P6YBootstrap.plist "${{ steps.wire.outputs.target_name }}.plist"; do
             filter_count="$(find "$out" -type f -name "$filter_name" | wc -l | tr -d ' ')"
@@ -315,11 +327,13 @@ jobs:
           mkdir -p "$metadata_dir"
           unzip -q "$ipa" 'Payload/*.app/Info.plist' -d "$metadata_dir"
 
-          info_plist="$(find "$metadata_dir/Payload" -type f -path '*.app/Info.plist' | head -n 1)"
-          if [ -z "$info_plist" ]; then
-            echo "The selected IPA has no Payload/*.app/Info.plist." >&2
+          shopt -s nullglob
+          info_plists=("$metadata_dir"/Payload/*.app/Info.plist)
+          if [ ${#info_plists[@]} -ne 1 ]; then
+            echo "Expected one main app Info.plist; found ${#info_plists[@]}." >&2
             exit 1
           fi
+          info_plist="${info_plists[0]}"
 
           app_version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$info_plist")"
           bundle_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$info_plist")"
@@ -340,11 +354,12 @@ jobs:
           esac
 
           unzip -q "$ipa" "Payload/*.app/$executable_name" -d "$metadata_dir"
-          executable="$(find "$metadata_dir/Payload" -type f -path "*.app/$executable_name" | head -n 1)"
-          if [ -z "$executable" ]; then
-            echo "The selected IPA is missing its main executable: $executable_name" >&2
+          executables=("$metadata_dir"/Payload/*.app/"$executable_name")
+          if [ ${#executables[@]} -ne 1 ]; then
+            echo "Expected one main executable named $executable_name; found ${#executables[@]}." >&2
             exit 1
           fi
+          executable="${executables[0]}"
 
           file "$executable" | tee "$GITHUB_WORKSPACE/dist/reports/ipa-executable-file.txt"
           lipo -archs "$executable" | tee "$GITHUB_WORKSPACE/dist/reports/ipa-executable-architectures.txt"
@@ -379,11 +394,13 @@ jobs:
         run: |
           set -euo pipefail
           chmod +x "$GITHUB_WORKSPACE/scripts/package_p6ytok_ipa.sh"
-          layout="$(find "$GITHUB_WORKSPACE/dist/layout" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
-          if [ -z "$layout" ]; then
-            echo "No unpacked package layout was found." >&2
+          shopt -s nullglob
+          layouts=("$GITHUB_WORKSPACE"/dist/layout/*)
+          if [ ${#layouts[@]} -ne 1 ] || [ ! -d "${layouts[0]}" ]; then
+            echo "Expected one unpacked package layout; found ${#layouts[@]}." >&2
             exit 1
           fi
+          layout="${layouts[0]}"
 
           "$GITHUB_WORKSPACE/scripts/package_p6ytok_ipa.sh" \
             --ipa "${{ steps.ipa.outputs.ipa_path }}" \
