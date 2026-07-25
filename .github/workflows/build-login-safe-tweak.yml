@@ -9,6 +9,7 @@ on:
         default: ""
   push:
     branches:
+      - main
       - agent/login-safe-compat
 
 permissions:
