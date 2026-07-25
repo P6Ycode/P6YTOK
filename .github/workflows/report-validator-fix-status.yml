@@ -1,0 +1,51 @@
+name: Report validator fixer status
+
+on:
+  workflow_run:
+    workflows:
+      - Apply login-safe validator fix
+    types:
+      - completed
+
+permissions:
+  contents: read
+  statuses: write
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish fixer status
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+        run: |
+          set -euo pipefail
+          case "$CONCLUSION" in
+            success) state=success ;;
+            *) state=failure ;;
+          esac
+          description="Validator fixer ${CONCLUSION}; run ${RUN_ID}"
+          payload="$(python3 - "$state" "$description" "$RUN_URL" <<'PY'
+          import json
+          import sys
+
+          state, description, target_url = sys.argv[1:]
+          print(json.dumps({
+              "state": state,
+              "context": "validator-fix",
+              "description": description[:140],
+              "target_url": target_url,
+          }))
+          PY
+          )"
+          curl --fail-with-body --location --retry 3 \
+            -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/statuses/$HEAD_SHA" \
+            -d "$payload"
