@@ -1,10 +1,10 @@
-name: Build login-safe P6YTOK tweak artifacts
+name: Build login-safe P6YTOK IPA artifacts
 
 on:
   workflow_dispatch:
     inputs:
       ipa_url:
-        description: "Optional direct URL to a user-provided decrypted IPA for packaging helper smoke test"
+        description: "Optional direct URL to a user-provided decrypted TikTok IPA"
         required: false
         default: ""
   push:
@@ -16,35 +16,47 @@ permissions:
 
 jobs:
   build:
-    name: Build login-safe tweak package
+    name: Build bootstrap, delayed payload, and optional unsigned IPA
     runs-on: macos-15
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install build dependencies
+      - name: Install build and Mach-O dependencies
         run: |
           set -euo pipefail
           brew update
           brew install make ldid xz dpkg
+          python3 -m pip install --user --upgrade lief
           git clone --recursive https://github.com/theos/theos.git "$HOME/theos"
           echo "THEOS=$HOME/theos" >> "$GITHUB_ENV"
 
-      - name: Wire login-safe compat into active Theos target
+      - name: Wire delayed payload and login-safe bootstrap
         id: wire
         run: |
           set -euo pipefail
           chmod +x scripts/wire_p6ycompat.sh
           scripts/wire_p6ycompat.sh "$GITHUB_WORKSPACE" | tee wire-output.txt
-          project_dir="$(awk -F= '/^project_dir=/ {print $2}' wire-output.txt | tail -n 1)"
-          if [ -z "$project_dir" ]; then
-            echo "Could not determine project_dir from wire script output." >&2
-            exit 1
-          fi
-          echo "project_dir=$project_dir" >> "$GITHUB_OUTPUT"
 
-      - name: Build package
+          for key in project_dir makefile target_name payload_dylib bootstrap_dylib; do
+            value="$(awk -F= -v key="$key" '$1 == key {sub(/^[^=]*=/, ""); print; exit}' wire-output.txt)"
+            if [ -z "$value" ]; then
+              echo "Could not determine $key from wire script output." >&2
+              exit 1
+            fi
+            echo "$key=$value" >> "$GITHUB_OUTPUT"
+          done
+
+      - name: Record resolved project layout
+        run: |
+          set -euo pipefail
+          mkdir -p dist/build
+          find "$GITHUB_WORKSPACE" -maxdepth 7 -type f -not -path '*/.git/*' | sort > dist/build/source-files.txt
+          cp "${{ steps.wire.outputs.makefile }}" dist/build/ResolvedMakefile
+          cp wire-output.txt dist/build/
+
+      - name: Build bootstrap and delayed feature payload
         working-directory: ${{ steps.wire.outputs.project_dir }}
         env:
           THEOS: ${{ env.THEOS }}
@@ -55,13 +67,17 @@ jobs:
           make clean
           make package FINALPACKAGE=1
 
-      - name: Collect tweak artifacts
+      - name: Collect and validate tweak artifacts
         working-directory: ${{ steps.wire.outputs.project_dir }}
         run: |
           set -euo pipefail
-          mkdir -p "$GITHUB_WORKSPACE/dist/deb" "$GITHUB_WORKSPACE/dist/dylib" "$GITHUB_WORKSPACE/dist/layout" "$GITHUB_WORKSPACE/dist/scripts"
+          mkdir -p "$GITHUB_WORKSPACE/dist/deb" \
+                   "$GITHUB_WORKSPACE/dist/dylib" \
+                   "$GITHUB_WORKSPACE/dist/layout" \
+                   "$GITHUB_WORKSPACE/dist/reports" \
+                   "$GITHUB_WORKSPACE/dist/scripts"
 
-          find . -type f -path "*/packages/*.deb" -print -exec cp {} "$GITHUB_WORKSPACE/dist/deb/" \;
+          find . -type f -path '*/packages/*.deb' -print -exec cp {} "$GITHUB_WORKSPACE/dist/deb/" \;
 
           shopt -s nullglob
           debs=("$GITHUB_WORKSPACE"/dist/deb/*.deb)
@@ -76,40 +92,65 @@ jobs:
             dpkg-deb -x "$deb" "$out"
           done
 
-          find "$GITHUB_WORKSPACE/dist/layout" -type f -name "*.dylib" -print -exec cp {} "$GITHUB_WORKSPACE/dist/dylib/" \; || true
+          bootstrap="$(find "$GITHUB_WORKSPACE/dist/layout" -type f -name '${{ steps.wire.outputs.bootstrap_dylib }}' | head -n 1)"
+          payload="$(find "$GITHUB_WORKSPACE/dist/layout" -type f -name '${{ steps.wire.outputs.payload_dylib }}' | head -n 1)"
+
+          if [ -z "$bootstrap" ]; then
+            echo "P6YBootstrap.dylib was not produced." >&2
+            exit 1
+          fi
+          if [ -z "$payload" ]; then
+            echo "Delayed feature payload ${{ steps.wire.outputs.payload_dylib }} was not produced." >&2
+            exit 1
+          fi
+
+          cp "$bootstrap" "$GITHUB_WORKSPACE/dist/dylib/P6YBootstrap.dylib"
+          cp "$payload" "$GITHUB_WORKSPACE/dist/dylib/${{ steps.wire.outputs.payload_dylib }}"
+          chmod 0755 "$GITHUB_WORKSPACE/dist/dylib/"*.dylib
+
+          file "$GITHUB_WORKSPACE/dist/dylib/P6YBootstrap.dylib" | tee "$GITHUB_WORKSPACE/dist/reports/bootstrap-file.txt"
+          file "$GITHUB_WORKSPACE/dist/dylib/${{ steps.wire.outputs.payload_dylib }}" | tee "$GITHUB_WORKSPACE/dist/reports/payload-file.txt"
+          otool -L "$GITHUB_WORKSPACE/dist/dylib/P6YBootstrap.dylib" | tee "$GITHUB_WORKSPACE/dist/reports/bootstrap-dependencies.txt"
+          otool -L "$GITHUB_WORKSPACE/dist/dylib/${{ steps.wire.outputs.payload_dylib }}" | tee "$GITHUB_WORKSPACE/dist/reports/payload-dependencies.txt"
+
+          if grep -E '/Library/MobileSubstrate|/var/jb|CydiaSubstrate|libhooker' "$GITHUB_WORKSPACE/dist/reports/"*-dependencies.txt; then
+            echo "A jailbreak-only hook runtime dependency remains in the IPA build." >&2
+            exit 1
+          fi
+
           cp "$GITHUB_WORKSPACE/scripts/package_p6ytok_ipa.sh" "$GITHUB_WORKSPACE/dist/scripts/"
 
-          cat > "$GITHUB_WORKSPACE/dist/README.txt" <<'EOF'
-          This artifact contains compiled login-safe P6YTOK tweak outputs.
+          cat > "$GITHUB_WORKSPACE/dist/README.txt" <<EOF
+          This artifact contains the login-safe two-dylib P6YTOK build.
 
-          - deb/: Theos package output.
-          - dylib/: extracted dynamic libraries for IPA injection with a user-provided IPA.
-          - layout/: unpacked package layout for inspection.
-          - scripts/package_p6ytok_ipa.sh: helper for copying the dylib into a user-provided IPA payload before local load-command injection and signing.
+          - dylib/P6YBootstrap.dylib: inject this into TikTok's main executable.
+          - dylib/${{ steps.wire.outputs.payload_dylib }}: copied beside the bootstrap and loaded only after normal TikTok UI appears.
+          - layout/: unpacked Theos package, including resource bundles.
+          - reports/: resolved Makefile, source list, architecture, and dependency reports.
+          - scripts/package_p6ytok_ipa.sh: builds an unsigned injected IPA from a user-provided decrypted IPA.
 
-          This workflow does not download, include, or distribute TikTok IPAs or signing assets.
+          No TikTok IPA, certificate, provisioning profile, password, token, or account data is stored in this artifact.
           EOF
 
-      - name: Optional user-provided IPA packaging smoke test
+      - name: Optional user-provided IPA packaging
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.ipa_url != '' }}
         run: |
           set -euo pipefail
           mkdir -p "$GITHUB_WORKSPACE/dist/ipa"
-          curl -L "${{ inputs.ipa_url }}" -o "$GITHUB_WORKSPACE/user-provided.ipa"
-          dylib="$(find "$GITHUB_WORKSPACE/dist/dylib" -type f -name '*.dylib' | head -n 1)"
-          if [ -z "$dylib" ]; then
-            echo "No dylib was found to package." >&2
-            exit 1
-          fi
+          curl --fail --location --retry 3 "${{ inputs.ipa_url }}" -o "$GITHUB_WORKSPACE/user-provided.ipa"
           chmod +x "$GITHUB_WORKSPACE/scripts/package_p6ytok_ipa.sh"
+          layout="$(find "$GITHUB_WORKSPACE/dist/layout" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
           "$GITHUB_WORKSPACE/scripts/package_p6ytok_ipa.sh" \
             --ipa "$GITHUB_WORKSPACE/user-provided.ipa" \
-            --dylib "$dylib" \
+            --bootstrap "$GITHUB_WORKSPACE/dist/dylib/P6YBootstrap.dylib" \
+            --payload "$GITHUB_WORKSPACE/dist/dylib/${{ steps.wire.outputs.payload_dylib }}" \
+            --layout "$layout" \
             --output "$GITHUB_WORKSPACE/dist/ipa/P6YTOK-login-safe-unsigned.ipa"
 
-      - name: Upload login-safe tweak artifacts
+      - name: Upload login-safe artifacts
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: p6ytok-login-safe-tweak-artifacts
+          name: p6ytok-login-safe-artifacts
           path: dist/
-          if-no-files-found: error
+          if-no-files-found: warn
