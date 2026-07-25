@@ -1,13 +1,14 @@
 # Login-Safe Artifact Build Request
 
-This file intentionally bumps `agent/login-safe-compat` after `.github/workflows/build-login-safe-tweak.yml` was added, so the branch push workflow can build the login-safe P6YTOK tweak artifacts.
+This file records the first default-branch build target for the login-safe two-dylib architecture.
 
-Requested build path:
+Requested path:
 
-1. Locate the active Theos Makefile.
-2. Wire `P6YCompat/P6YCompatCore.m`, `P6YCompat/P6YDelayedInit.xm`, and `P6YCompat/P6YDelayedGroups.xm` into the detected tweak target during CI.
-3. Build the package with Theos.
-4. Upload `.deb`, extracted `.dylib`, unpacked layout, and packaging helper artifacts.
-5. Use the artifact with a user-provided decrypted TikTok IPA and local signing flow for device testing.
+1. Locate the active Theos Makefile and original tweak target.
+2. Compile the original target as a delayed feature payload using the self-contained Logos runtime when supported.
+3. Compile `P6YBootstrap.dylib` as the only launch-injected dylib.
+4. Validate both dylibs for jailbreak-only runtime dependencies.
+5. Upload build logs and diagnostics even if compilation fails.
+6. When a user-provided decrypted TikTok IPA URL is supplied manually, inject the bootstrap with LIEF and produce an unsigned IPA.
 
-Requested: 2026-07-25 03:15 America/New_York
+The workflow is configured for pushes to `main` and `agent/login-safe-compat`.
