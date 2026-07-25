@@ -12,3 +12,5 @@ Requested path:
 6. When a user-provided decrypted TikTok IPA URL is supplied manually, inject the bootstrap with LIEF and produce an unsigned IPA.
 
 The workflow is configured for pushes to `main` and `agent/login-safe-compat`.
+
+Main branch publication requested from commit `2fd8d444e0878ed5ad3d676656a133d8dd56100e`.
