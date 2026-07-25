@@ -1,6 +1,14 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 
+// Objective-C UIKit exposes UIViewController children through
+// childViewControllers. Keep the bootstrap source compatible with the
+// equivalent modern API spelling used by this module.
+#ifndef P6Y_COMPAT_CHILDREN_ALIAS
+#define P6Y_COMPAT_CHILDREN_ALIAS 1
+#define children childViewControllers
+#endif
+
 typedef NS_ENUM(NSInteger, P6YCompatFeatureGroup) {
     P6YCompatFeatureGroupSettings = 0,
     P6YCompatFeatureGroupDownloads,
