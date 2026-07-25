@@ -178,6 +178,8 @@ NSString *P6YCompatFeatureGroupName(P6YCompatFeatureGroup group) {
         case P6YCompatFeatureGroupBrowserRedirects:
             return @"browser-redirects";
     }
+
+    return @"unknown";
 }
 
 BOOL P6YCompatIsEnabled(void) {
