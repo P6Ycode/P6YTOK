@@ -193,6 +193,7 @@ jobs:
             local dylib="$1"
             local label="$2"
             local dependency_report="$GITHUB_WORKSPACE/dist/reports/${label}-dependencies.txt"
+            local own_install_name="/Library/MobileSubstrate/DynamicLibraries/$(basename "$dylib")"
 
             file "$dylib" | tee "$GITHUB_WORKSPACE/dist/reports/${label}-file.txt"
             lipo -archs "$dylib" | tee "$GITHUB_WORKSPACE/dist/reports/${label}-architectures.txt"
@@ -206,7 +207,7 @@ jobs:
 
             while IFS= read -r dependency; do
               case "$dependency" in
-                /System/Library/*|/usr/lib/*|@*) ;;
+                "$own_install_name"|/System/Library/*|/usr/lib/*|@*) ;;
                 *)
                   echo "Unsupported dependency in $label: $dependency" >&2
                   exit 1
