@@ -1,6 +1,6 @@
 # P6YTOK Integrity Compatibility Research Plan
 
-> **Status:** Research and planning only. No integrity compatibility layer has been implemented.
+> **Status:** Implementation started in `P6YCompat/`.
 >
 > **Initial target:** P6YTOK injected into a patched TikTok 46.1.0 IPA.
 >
@@ -8,7 +8,7 @@
 
 ## Purpose
 
-This document records the proposed investigation into why a modified TikTok IPA may fail login or behave differently from the official App Store installation.
+This document records the investigation into why a modified TikTok IPA may fail login or behave differently from the official App Store installation.
 
 The goal is to separate three possible causes:
 
@@ -16,23 +16,29 @@ The goal is to separate three possible causes:
 2. TikTok is detecting local differences in the modified application environment.
 3. TikTok's backend is rejecting the re-signed installation independently of local application behavior.
 
-## Startup Model
+## Current Implementation Direction
+
+The first implementation pass is login-safe mode, not a broad DouX-style bypass port.
+
+The new `P6YCompat/` module keeps P6YTOK present but quiet while TikTok is on login-sensitive screens. It loads a tiny observer and safe diagnostics at startup, then enables delayed feature groups only after the app appears to have reached normal TikTok UI.
 
 ```text
-Launch patched TikTok
+Launch patched TikTok IPA
         ↓
-iOS loads the injected P6YTOK dylib
+iOS loads injected P6YTOK dylib
         ↓
-P6YTOK initializes its normal feature modules
+P6YCompat bootstraps in login-safe mode
         ↓
-A future compatibility diagnostics module checks available TikTok classes and selectors
+Login/onboarding/auth screens run with P6YTOK feature groups off
         ↓
-Unsupported P6YTOK behavior is disabled safely
+P6YCompat observes main TikTok UI
         ↓
-TikTok continues launching
+Delayed P6YTOK feature groups become eligible to initialize
+        ↓
+Tweaks can be enabled in controlled groups
 ```
 
-## How This Would Differ From Older DouX/BHTikTok Code
+## How This Differs From Older DouX/BHTikTok Code
 
 Older projects relied on fixed assumptions about TikTok's internal classes and older jailbreak environments. Those assumptions may no longer match TikTok 46.1.0.
 
@@ -43,12 +49,15 @@ A current P6YTOK approach should instead:
 - Keep IPA behavior separate from any future rootless `.deb` behavior.
 - Test changes in small independent groups rather than enabling many compatibility changes at once.
 - Include a single kill switch so the diagnostics or compatibility module can be disabled without rebuilding the whole tweak.
+- Keep feature groups off during login until the normal app UI is visible.
 
 ## IPA and Rootless `.deb` Are Different Environments
 
 ### Patched IPA
 
 A patched IPA is decrypted, modified, injected, and re-signed. This can change properties that cannot be fully reproduced from inside the running app.
+
+This is the first target for P6YCompat.
 
 ### Rootless `.deb`
 
@@ -76,14 +85,15 @@ The previous global Keychain workaround was removed because it could interfere w
 
 ## Runtime Diagnostics
 
-A future diagnostics module may record only non-sensitive compatibility information such as:
+The diagnostics module may record only non-sensitive compatibility information such as:
 
 - Whether an expected TikTok class exists
 - Whether an expected selector exists
 - Whether a P6YTOK feature module initialized successfully
 - Whether a feature was disabled because its target API was unavailable
 - The active TikTok application version
-- Whether the build is running as a patched IPA or a jailbreak-injected tweak
+- Whether the build appears to be running as a patched IPA
+- Visible controller class names used for login-safe/main-UI detection
 
 Diagnostics must never record passwords, tokens, Keychain contents, private messages, login payloads, cookies, or account data.
 
@@ -95,10 +105,12 @@ Recommended test order:
 
 ```text
 1. P6YTOK IPA without any new compatibility module
-2. P6YTOK IPA with diagnostics only
-3. P6YTOK IPA with runtime feature gating
-4. P6YTOK IPA with one individually tested local compatibility change
-5. Repeat with each additional change separately
+2. P6YTOK IPA with P6YCompat login-safe diagnostics only
+3. P6YTOK IPA with delayed settings shell only
+4. P6YTOK IPA with downloads enabled after login
+5. P6YTOK IPA with feed/UI features enabled after login
+6. P6YTOK IPA with profile features enabled after login
+7. Repeat with each additional group separately
 ```
 
 For every build, record:
@@ -110,6 +122,7 @@ For every build, record:
 - Whether login reaches the server
 - Exact error message
 - Whether the same account works in the official App Store TikTok app
+- Which P6YCompat groups were enabled
 
 ## Important Limitation
 
@@ -124,6 +137,13 @@ Therefore, local compatibility changes cannot guarantee that the IPA will log in
 
 ## Current Repository State
 
-The current P6YTOK Makefile compiles the normal feature modules only. No `P6YIntegrityCompat` implementation currently exists.
+`P6YCompat/` now contains the first login-safe compatibility module:
 
-This file documents the IPA-first research plan, testing boundaries, and known limitations. It does not claim that a bypass or compatibility layer has been completed.
+- `P6YCompatCore.h`
+- `P6YCompatCore.m`
+- `P6YDelayedInit.xm`
+- `P6YDelayedGroups.xm`
+- `P6YFeatureGate.h`
+- `README.md`
+
+The connector did not expose the current source Makefile path during this pass, so the module is added with integration instructions instead of guessing the build-file location.
