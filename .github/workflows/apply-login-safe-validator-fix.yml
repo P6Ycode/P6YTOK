@@ -54,4 +54,4 @@ jobs:
           git commit -m "ci: allow dylibs' own install names"
           git push origin HEAD:main
 
-# Existing workflow touch: trigger after initial creation.
+# Existing workflow touch: second trigger with status reporting enabled.
