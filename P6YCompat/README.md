@@ -24,6 +24,10 @@ It is intentionally not a DouX-style all-in bypass port. The goal is narrower an
   - hooks `UIViewController viewDidAppear:` only to watch screen transitions
   - flips out of login-safe mode when the visible controller looks like main TikTok UI
 
+- `P6YDelayedGroups.xm`
+  - coordinator that fires when delayed feature groups become eligible
+  - placeholder for `%init(P6YDownloads)`, `%init(P6YFeedUI)`, and other migrated groups
+
 - `P6YFeatureGate.h`
   - bridge helpers for existing hooks while moving them into delayed Logos groups
 
@@ -32,13 +36,13 @@ It is intentionally not a DouX-style all-in bypass port. The goal is narrower an
 Add the compat files to the tweak target's source list:
 
 ```make
-P6YTOK_FILES += P6YCompat/P6YCompatCore.m P6YCompat/P6YDelayedInit.xm
+P6YTOK_FILES += P6YCompat/P6YCompatCore.m P6YCompat/P6YDelayedInit.xm P6YCompat/P6YDelayedGroups.xm
 ```
 
 If the project still uses the original BHTikTok target name, use that variable instead:
 
 ```make
-BHTikTok_FILES += P6YCompat/P6YCompatCore.m P6YCompat/P6YDelayedInit.xm
+BHTikTok_FILES += P6YCompat/P6YCompatCore.m P6YCompat/P6YDelayedInit.xm P6YCompat/P6YDelayedGroups.xm
 ```
 
 The repo connector did not expose the current source Makefile path during this pass, so this branch adds the module and integration instructions without guessing a build-file location.
@@ -59,7 +63,13 @@ Preferred shape:
 %end
 ```
 
-Then initialize that group only after `P6YCompatDidEnableFeatureGroupsNotification` fires.
+Then initialize that group from `P6YDelayedGroups.xm` only after `P6YCompatDidEnableFeatureGroupsNotification` fires:
+
+```logos
+if (P6YCompatShouldRunFeatureGroup(P6YCompatFeatureGroupDownloads)) {
+    %init(P6YDownloads);
+}
+```
 
 For hooks that cannot be moved immediately, use `P6YFeatureGate.h` as a bridge:
 
