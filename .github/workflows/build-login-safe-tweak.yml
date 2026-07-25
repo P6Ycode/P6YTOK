@@ -1,0 +1,115 @@
+name: Build login-safe P6YTOK tweak artifacts
+
+on:
+  workflow_dispatch:
+    inputs:
+      ipa_url:
+        description: "Optional direct URL to a user-provided decrypted IPA for packaging helper smoke test"
+        required: false
+        default: ""
+  push:
+    branches:
+      - agent/login-safe-compat
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build login-safe tweak package
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          set -euo pipefail
+          brew update
+          brew install make ldid xz dpkg
+          git clone --recursive https://github.com/theos/theos.git "$HOME/theos"
+          echo "THEOS=$HOME/theos" >> "$GITHUB_ENV"
+
+      - name: Wire login-safe compat into active Theos target
+        id: wire
+        run: |
+          set -euo pipefail
+          chmod +x scripts/wire_p6ycompat.sh
+          scripts/wire_p6ycompat.sh "$GITHUB_WORKSPACE" | tee wire-output.txt
+          project_dir="$(awk -F= '/^project_dir=/ {print $2}' wire-output.txt | tail -n 1)"
+          if [ -z "$project_dir" ]; then
+            echo "Could not determine project_dir from wire script output." >&2
+            exit 1
+          fi
+          echo "project_dir=$project_dir" >> "$GITHUB_OUTPUT"
+
+      - name: Build package
+        working-directory: ${{ steps.wire.outputs.project_dir }}
+        env:
+          THEOS: ${{ env.THEOS }}
+          FINALPACKAGE: "1"
+          TARGET: iphone:clang:latest:14.0
+        run: |
+          set -euo pipefail
+          make clean
+          make package FINALPACKAGE=1
+
+      - name: Collect tweak artifacts
+        working-directory: ${{ steps.wire.outputs.project_dir }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$GITHUB_WORKSPACE/dist/deb" "$GITHUB_WORKSPACE/dist/dylib" "$GITHUB_WORKSPACE/dist/layout" "$GITHUB_WORKSPACE/dist/scripts"
+
+          find . -type f -path "*/packages/*.deb" -print -exec cp {} "$GITHUB_WORKSPACE/dist/deb/" \;
+
+          shopt -s nullglob
+          debs=("$GITHUB_WORKSPACE"/dist/deb/*.deb)
+          if [ ${#debs[@]} -eq 0 ]; then
+            echo "No .deb package was produced." >&2
+            exit 1
+          fi
+
+          for deb in "${debs[@]}"; do
+            out="$GITHUB_WORKSPACE/dist/layout/$(basename "$deb" .deb)"
+            mkdir -p "$out"
+            dpkg-deb -x "$deb" "$out"
+          done
+
+          find "$GITHUB_WORKSPACE/dist/layout" -type f -name "*.dylib" -print -exec cp {} "$GITHUB_WORKSPACE/dist/dylib/" \; || true
+          cp "$GITHUB_WORKSPACE/scripts/package_p6ytok_ipa.sh" "$GITHUB_WORKSPACE/dist/scripts/"
+
+          cat > "$GITHUB_WORKSPACE/dist/README.txt" <<'EOF'
+          This artifact contains compiled login-safe P6YTOK tweak outputs.
+
+          - deb/: Theos package output.
+          - dylib/: extracted dynamic libraries for IPA injection with a user-provided IPA.
+          - layout/: unpacked package layout for inspection.
+          - scripts/package_p6ytok_ipa.sh: helper for copying the dylib into a user-provided IPA payload before local load-command injection and signing.
+
+          This workflow does not download, include, or distribute TikTok IPAs or signing assets.
+          EOF
+
+      - name: Optional user-provided IPA packaging smoke test
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.ipa_url != '' }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$GITHUB_WORKSPACE/dist/ipa"
+          curl -L "${{ inputs.ipa_url }}" -o "$GITHUB_WORKSPACE/user-provided.ipa"
+          dylib="$(find "$GITHUB_WORKSPACE/dist/dylib" -type f -name '*.dylib' | head -n 1)"
+          if [ -z "$dylib" ]; then
+            echo "No dylib was found to package." >&2
+            exit 1
+          fi
+          chmod +x "$GITHUB_WORKSPACE/scripts/package_p6ytok_ipa.sh"
+          "$GITHUB_WORKSPACE/scripts/package_p6ytok_ipa.sh" \
+            --ipa "$GITHUB_WORKSPACE/user-provided.ipa" \
+            --dylib "$dylib" \
+            --output "$GITHUB_WORKSPACE/dist/ipa/P6YTOK-login-safe-unsigned.ipa"
+
+      - name: Upload login-safe tweak artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: p6ytok-login-safe-tweak-artifacts
+          path: dist/
+          if-no-files-found: error
