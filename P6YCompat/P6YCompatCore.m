@@ -144,7 +144,7 @@ static BOOL P6YCompatControllerTreeContainsTabBar(UIViewController *controller) 
         return YES;
     }
 
-    for (UIViewController *child in controller.children) {
+    for (UIViewController *child in controller.childViewControllers) {
         if (P6YCompatControllerTreeContainsTabBar(child)) {
             return YES;
         }
