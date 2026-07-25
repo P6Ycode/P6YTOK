@@ -31,6 +31,16 @@ print(os.path.relpath(os.path.join(sys.argv[1], "P6YCompat"), sys.argv[2]))
 PY
 )"
 
+# The internal Logos generator removes the need to embed a jailbreak-only
+# Substrate runtime. It cannot compile %hookf, so detect that case explicitly.
+hookf_sources="$(grep -RIl --exclude-dir=.git --include='*.x' --include='*.xm' --include='*.xi' --include='*.xmi' '%hookf' "$project_dir" 2>/dev/null || true)"
+forced_substrate_sources="$(grep -RIl --exclude-dir=.git --include='*.x' --include='*.xm' --include='*.xi' --include='*.xmi' -E '%config\([^)]*generator[[:space:]]*=[[:space:]]*(MobileSubstrate|libhooker)' "$project_dir" 2>/dev/null || true)"
+
+payload_generator="internal"
+if [ -n "$hookf_sources" ] || [ -n "$forced_substrate_sources" ]; then
+  payload_generator="MobileSubstrate"
+fi
+
 payload_header="$repo_root/P6YCompat/P6YFeaturePayloadName.h"
 cat > "$payload_header" <<EOF
 #import <Foundation/Foundation.h>
@@ -41,7 +51,7 @@ cat > "$payload_header" <<EOF
 #endif
 EOF
 
-python3 - "$makefile" "$target_name" "$rel_compat_dir" <<'PY'
+python3 - "$makefile" "$target_name" "$rel_compat_dir" "$payload_generator" <<'PY'
 from pathlib import Path
 import re
 import sys
@@ -49,12 +59,12 @@ import sys
 makefile = Path(sys.argv[1])
 target = sys.argv[2]
 compat = sys.argv[3]
+payload_generator = sys.argv[4]
 text = makefile.read_text()
 
 begin = "# BEGIN P6Y LOGIN-SAFE IPA BUILD"
 end = "# END P6Y LOGIN-SAFE IPA BUILD"
 
-# Make repeated local/CI runs idempotent.
 text = re.sub(
     rf"\n?{re.escape(begin)}.*?{re.escape(end)}\n?",
     "\n",
@@ -62,21 +72,23 @@ text = re.sub(
     flags=re.S,
 )
 
-# Remove the older single-target wiring line if a previous script revision added it.
 text = "\n".join(
     line for line in text.splitlines()
     if not ("P6YCompatCore.m" in line and "_FILES" in line)
 ) + "\n"
 
+generator_line = ""
+if payload_generator == "internal":
+    generator_line = f"{target}_LOGOS_DEFAULT_GENERATOR = internal\n"
+
 block = f"""
 {begin}
-# Keep the legacy P6YTOK target as a delayed feature payload. It is compiled
-# with Logos' Objective-C runtime generator so an IPA build does not depend on
-# a jailbreak-only Substrate runtime.
-{target}_LOGOS_DEFAULT_GENERATOR = internal
-
+# Keep the legacy P6YTOK target as a delayed feature payload. When possible,
+# compile it with Logos' Objective-C runtime generator so the IPA does not need
+# a jailbreak-only hook runtime.
+{generator_line}
 # Only this small bootstrap dylib is injected into the TikTok executable.
-# It loads {target}.dylib with dlopen after TikTok reaches normal app UI.
+# It loads {target}.dylib with dlopen after TikTok reaches verified normal UI.
 TWEAK_NAME += P6YBootstrap
 P6YBootstrap_FILES = {compat}/P6YCompatCore.m {compat}/P6YDelayedInit.xm {compat}/P6YDelayedGroups.xm
 P6YBootstrap_FRAMEWORKS = Foundation UIKit
@@ -100,4 +112,16 @@ echo "makefile=$makefile"
 echo "target_name=$target_name"
 echo "payload_dylib=${target_name}.dylib"
 echo "bootstrap_dylib=P6YBootstrap.dylib"
+echo "payload_generator=$payload_generator"
 echo "payload_header=$payload_header"
+
+if [ -n "$hookf_sources" ]; then
+  echo "hookf_sources<<EOF"
+  printf '%s\n' "$hookf_sources"
+  echo "EOF"
+fi
+if [ -n "$forced_substrate_sources" ]; then
+  echo "forced_substrate_sources<<EOF"
+  printf '%s\n' "$forced_substrate_sources"
+  echo "EOF"
+fi
