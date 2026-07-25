@@ -27,7 +27,7 @@ static BOOL P6YCompatDefaultBool(NSString *key, BOOL defaultValue) {
 }
 
 static NSString *P6YCompatLower(NSString *value) {
-    return value.length ? [value lowercaseString] : @"";
+    return value.length ? value.lowercaseString : @"";
 }
 
 static BOOL P6YCompatNameContainsAny(NSString *name, NSArray<NSString *> *needles) {
@@ -60,8 +60,8 @@ static BOOL P6YCompatControllerLooksLikeMainApp(NSString *className) {
         return NO;
     }
 
-    // Deliberately avoid broad words such as "root" and "main". They can appear
-    // in pre-login controller names and would wake the feature payload too early.
+    // Avoid broad markers such as "root" and "main" because they can appear
+    // in pre-login controller names.
     return P6YCompatNameContainsAny(className, @[
         @"tabbar",
         @"feed",
@@ -76,30 +76,34 @@ static BOOL P6YCompatControllerLooksLikeMainApp(NSString *className) {
 }
 
 static UIWindow *P6YCompatKeyWindow(void) {
-    UIWindow *window = nil;
+    UIWindow *fallbackWindow = nil;
 
-    if (@available(iOS 13.0, *)) {
-        for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
-            if (scene.activationState != UISceneActivationStateForegroundActive || ![scene isKindOfClass:[UIWindowScene class]]) {
-                continue;
+    for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
+        if (![scene isKindOfClass:[UIWindowScene class]]) {
+            continue;
+        }
+
+        if (scene.activationState != UISceneActivationStateForegroundActive &&
+            scene.activationState != UISceneActivationStateForegroundInactive) {
+            continue;
+        }
+
+        for (UIWindow *window in ((UIWindowScene *)scene).windows) {
+            if (window.isKeyWindow) {
+                return window;
             }
-            for (UIWindow *sceneWindow in ((UIWindowScene *)scene).windows) {
-                if (sceneWindow.isKeyWindow) {
-                    window = sceneWindow;
-                    break;
-                }
-            }
-            if (window) {
-                break;
+
+            if (!fallbackWindow &&
+                !window.hidden &&
+                window.alpha > 0.0 &&
+                window.windowLevel == UIWindowLevelNormal &&
+                window.rootViewController != nil) {
+                fallbackWindow = window;
             }
         }
     }
 
-    if (!window) {
-        window = UIApplication.sharedApplication.keyWindow;
-    }
-
-    return window;
+    return fallbackWindow;
 }
 
 static UIViewController *P6YCompatTopViewControllerFrom(UIViewController *root) {
@@ -113,11 +117,11 @@ static UIViewController *P6YCompatTopViewControllerFrom(UIViewController *root) 
     }
 
     if ([candidate isKindOfClass:[UINavigationController class]]) {
-        return P6YCompatTopViewControllerFrom([(UINavigationController *)candidate topViewController]);
+        return P6YCompatTopViewControllerFrom(((UINavigationController *)candidate).topViewController);
     }
 
     if ([candidate isKindOfClass:[UITabBarController class]]) {
-        UIViewController *selected = [(UITabBarController *)candidate selectedViewController];
+        UIViewController *selected = ((UITabBarController *)candidate).selectedViewController;
         if (selected) {
             return P6YCompatTopViewControllerFrom(selected);
         }
@@ -132,15 +136,15 @@ static BOOL P6YCompatControllerTreeContainsTabBar(UIViewController *controller) 
     }
 
     if ([controller isKindOfClass:[UITabBarController class]]) {
-        UITabBarController *tabBar = (UITabBarController *)controller;
-        return tabBar.viewControllers.count >= 2;
+        return ((UITabBarController *)controller).viewControllers.count >= 2;
     }
 
-    if (controller.presentedViewController && P6YCompatControllerTreeContainsTabBar(controller.presentedViewController)) {
+    if (controller.presentedViewController &&
+        P6YCompatControllerTreeContainsTabBar(controller.presentedViewController)) {
         return YES;
     }
 
-    for (UIViewController *child in controller.childViewControllers) {
+    for (UIViewController *child in controller.children) {
         if (P6YCompatControllerTreeContainsTabBar(child)) {
             return YES;
         }
@@ -158,15 +162,21 @@ static BOOL P6YCompatMainUIIsStable(void) {
         return NO;
     }
 
-    UIViewController *visible = P6YCompatVisibleController();
+    UIWindow *window = P6YCompatKeyWindow();
+    UIViewController *visible = P6YCompatTopViewControllerFrom(window.rootViewController);
     NSString *className = visible ? NSStringFromClass(visible.class) : @"";
+
     if (!P6YCompatControllerLooksLikeMainApp(className)) {
         return NO;
     }
 
-    UIViewController *root = P6YCompatKeyWindow().rootViewController;
-    BOOL hasTabBar = P6YCompatControllerTreeContainsTabBar(root);
-    BOOL strongFeedMarker = P6YCompatNameContainsAny(className, @[@"feed", @"aweme", @"foryou", @"following"]);
+    BOOL hasTabBar = P6YCompatControllerTreeContainsTabBar(window.rootViewController);
+    BOOL strongFeedMarker = P6YCompatNameContainsAny(className, @[
+        @"feed",
+        @"aweme",
+        @"foryou",
+        @"following"
+    ]);
 
     return hasTabBar || strongFeedMarker;
 }
@@ -189,16 +199,15 @@ void P6YCompatLog(NSString *format, ...) {
 }
 
 NSString *P6YCompatTikTokVersion(void) {
-    NSString *version = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"];
+    NSString *version = [NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"];
     return version.length ? version : @"unknown";
 }
 
 BOOL P6YCompatLooksLikeInjectedIPA(void) {
     NSString *bundlePath = NSBundle.mainBundle.bundlePath ?: @"";
-    BOOL hasEmbeddedProvision = [[NSFileManager defaultManager] fileExistsAtPath:[bundlePath stringByAppendingPathComponent:@"embedded.mobileprovision"]];
+    BOOL hasEmbeddedProvision = [NSFileManager.defaultManager fileExistsAtPath:[bundlePath stringByAppendingPathComponent:@"embedded.mobileprovision"]];
     NSString *bundleIdentifier = NSBundle.mainBundle.bundleIdentifier.lowercaseString ?: @"";
     BOOL isTikTokBundle = [bundleIdentifier containsString:@"tiktok"] || [bundleIdentifier containsString:@"musically"];
-
     return isTikTokBundle && hasEmbeddedProvision;
 }
 
@@ -218,20 +227,13 @@ BOOL P6YCompatClassSelectorExists(NSString *className, SEL selector) {
 
 NSString *P6YCompatFeatureGroupName(P6YCompatFeatureGroup group) {
     switch (group) {
-        case P6YCompatFeatureGroupSettings:
-            return @"settings";
-        case P6YCompatFeatureGroupDownloads:
-            return @"downloads";
-        case P6YCompatFeatureGroupFeedUI:
-            return @"feed-ui";
-        case P6YCompatFeatureGroupProfile:
-            return @"profile";
-        case P6YCompatFeatureGroupAdFiltering:
-            return @"ad-filtering";
-        case P6YCompatFeatureGroupBrowserRedirects:
-            return @"browser-redirects";
+        case P6YCompatFeatureGroupSettings: return @"settings";
+        case P6YCompatFeatureGroupDownloads: return @"downloads";
+        case P6YCompatFeatureGroupFeedUI: return @"feed-ui";
+        case P6YCompatFeatureGroupProfile: return @"profile";
+        case P6YCompatFeatureGroupAdFiltering: return @"ad-filtering";
+        case P6YCompatFeatureGroupBrowserRedirects: return @"browser-redirects";
     }
-
     return @"unknown";
 }
 
@@ -250,7 +252,9 @@ BOOL P6YCompatIsLoginSafeModeEnabled(void) {
 }
 
 BOOL P6YCompatAreDelayedFeatureGroupsEnabled(void) {
-    return P6YCompatIsEnabled() && p6yCompatDelayedGroupsEnabled && !P6YCompatIsLoginSafeModeEnabled();
+    return P6YCompatIsEnabled() &&
+           p6yCompatDelayedGroupsEnabled &&
+           !P6YCompatIsLoginSafeModeEnabled();
 }
 
 BOOL P6YCompatShouldRunFeatureGroup(P6YCompatFeatureGroup group) {
@@ -276,12 +280,15 @@ void P6YCompatObserveViewController(UIViewController *viewController) {
     p6yCompatNavigationGeneration += 1;
     NSUInteger observedGeneration = p6yCompatNavigationGeneration;
 
-    P6YCompatLog(@"visible controller=%@ tiktok=%@ ipa=%@", className, P6YCompatTikTokVersion(), P6YCompatLooksLikeInjectedIPA() ? @"yes" : @"no");
+    P6YCompatLog(@"visible controller=%@ tiktok=%@ ipa=%@",
+                 className,
+                 P6YCompatTikTokVersion(),
+                 P6YCompatLooksLikeInjectedIPA() ? @"yes" : @"no");
 
     if (P6YCompatControllerLooksLikeLogin(className)) {
         p6yCompatLoginSafeMode = YES;
         p6yCompatMainUIVerificationScheduled = NO;
-        [[NSNotificationCenter defaultCenter] postNotificationName:P6YCompatLoginSafeModeChangedNotification object:nil];
+        [NSNotificationCenter.defaultCenter postNotificationName:P6YCompatLoginSafeModeChangedNotification object:nil];
         return;
     }
 
@@ -292,7 +299,8 @@ void P6YCompatObserveViewController(UIViewController *viewController) {
     p6yCompatMainUIVerificationScheduled = YES;
     P6YCompatLog(@"main UI candidate observed; verifying after grace period: %@", className);
 
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
         p6yCompatMainUIVerificationScheduled = NO;
 
         if (observedGeneration != p6yCompatNavigationGeneration) {
@@ -302,7 +310,8 @@ void P6YCompatObserveViewController(UIViewController *viewController) {
 
         if (!P6YCompatMainUIIsStable()) {
             UIViewController *visible = P6YCompatVisibleController();
-            P6YCompatLog(@"main UI verification rejected: %@", visible ? NSStringFromClass(visible.class) : @"none");
+            P6YCompatLog(@"main UI verification rejected: %@",
+                         visible ? NSStringFromClass(visible.class) : @"none");
             return;
         }
 
@@ -320,7 +329,8 @@ void P6YCompatEnableFeatureGroupsIfReady(void) {
         return;
     }
 
-    if (!P6YCompatDefaultBool(kP6YCompatManualFeatureEnableKey, NO) && !P6YCompatMainUIIsStable()) {
+    if (!P6YCompatDefaultBool(kP6YCompatManualFeatureEnableKey, NO) &&
+        !P6YCompatMainUIIsStable()) {
         return;
     }
 
@@ -328,8 +338,8 @@ void P6YCompatEnableFeatureGroupsIfReady(void) {
     p6yCompatDelayedGroupsEnabled = YES;
     P6YCompatLog(@"delayed P6YTOK feature payload enabled after verified main UI");
 
-    [[NSNotificationCenter defaultCenter] postNotificationName:P6YCompatLoginSafeModeChangedNotification object:nil];
-    [[NSNotificationCenter defaultCenter] postNotificationName:P6YCompatDidEnableFeatureGroupsNotification object:nil];
+    [NSNotificationCenter.defaultCenter postNotificationName:P6YCompatLoginSafeModeChangedNotification object:nil];
+    [NSNotificationCenter.defaultCenter postNotificationName:P6YCompatDidEnableFeatureGroupsNotification object:nil];
 }
 
 void P6YCompatBootstrap(void) {
@@ -344,5 +354,7 @@ void P6YCompatBootstrap(void) {
     p6yCompatMainUIVerificationScheduled = NO;
     p6yCompatNavigationGeneration = 0;
 
-    P6YCompatLog(@"bootstrapped login-safe compat tiktok=%@ ipa=%@", P6YCompatTikTokVersion(), P6YCompatLooksLikeInjectedIPA() ? @"yes" : @"no");
+    P6YCompatLog(@"bootstrapped login-safe compat tiktok=%@ ipa=%@",
+                 P6YCompatTikTokVersion(),
+                 P6YCompatLooksLikeInjectedIPA() ? @"yes" : @"no");
 }
