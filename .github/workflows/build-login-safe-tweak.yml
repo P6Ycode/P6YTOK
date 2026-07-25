@@ -26,11 +26,20 @@ jobs:
       - name: Install build and Mach-O dependencies
         run: |
           set -euo pipefail
-          brew update
           brew install make ldid xz dpkg
-          python3 -m pip install --user --upgrade lief
+
+          python3 -m venv "$RUNNER_TEMP/p6y-lief-venv"
+          "$RUNNER_TEMP/p6y-lief-venv/bin/python" -m pip install --upgrade pip lief
+          echo "$RUNNER_TEMP/p6y-lief-venv/bin" >> "$GITHUB_PATH"
+
           git clone --recursive https://github.com/theos/theos.git "$HOME/theos"
           echo "THEOS=$HOME/theos" >> "$GITHUB_ENV"
+
+      - name: Validate helper scripts
+        run: |
+          set -euo pipefail
+          bash -n scripts/wire_p6ycompat.sh
+          bash -n scripts/package_p6ytok_ipa.sh
 
       - name: Wire delayed payload and login-safe bootstrap
         id: wire
@@ -39,7 +48,7 @@ jobs:
           chmod +x scripts/wire_p6ycompat.sh
           scripts/wire_p6ycompat.sh "$GITHUB_WORKSPACE" | tee wire-output.txt
 
-          for key in project_dir makefile target_name payload_dylib bootstrap_dylib; do
+          for key in project_dir makefile target_name payload_dylib bootstrap_dylib payload_generator; do
             value="$(awk -F= -v key="$key" '$1 == key {sub(/^[^=]*=/, ""); print; exit}' wire-output.txt)"
             if [ -z "$value" ]; then
               echo "Could not determine $key from wire script output." >&2
@@ -47,6 +56,12 @@ jobs:
             fi
             echo "$key=$value" >> "$GITHUB_OUTPUT"
           done
+
+          if [ "$(awk -F= '$1 == "payload_generator" {print $2; exit}' wire-output.txt)" != "internal" ]; then
+            echo "The legacy payload contains %hookf or forces a non-internal Logos generator." >&2
+            echo "That requires bundling a compatible hook runtime before this can be a self-contained IPA build." >&2
+            exit 1
+          fi
 
       - name: Record resolved project layout
         run: |
@@ -124,7 +139,7 @@ jobs:
           This artifact contains the login-safe two-dylib P6YTOK build.
 
           - dylib/P6YBootstrap.dylib: inject this into TikTok's main executable.
-          - dylib/${{ steps.wire.outputs.payload_dylib }}: copied beside the bootstrap and loaded only after normal TikTok UI appears.
+          - dylib/${{ steps.wire.outputs.payload_dylib }}: copied beside the bootstrap and loaded only after verified normal TikTok UI appears.
           - layout/: unpacked Theos package, including resource bundles.
           - reports/: resolved Makefile, source list, architecture, and dependency reports.
           - scripts/package_p6ytok_ipa.sh: builds an unsigned injected IPA from a user-provided decrypted IPA.
