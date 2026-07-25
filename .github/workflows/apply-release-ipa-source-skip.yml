@@ -24,30 +24,27 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          import re
 
           path = Path('.github/workflows/build-login-safe-tweak.yml')
-          text = path.read_text(encoding='utf-8')
-          pattern = re.compile(
-              r'(?m)^(?P<indent>\s*)for asset in release\.get\("assets", \[\]\):\n'
-              r'(?P=indent)    name = asset\.get\("name", ""\)\n'
-              r'(?P=indent)    matches = name == requested_name if requested_name else name\.lower\(\)\.endswith\("\.ipa"\)$'
-          )
+          lines = path.read_text(encoding='utf-8').splitlines()
+          target = 'matches = name == requested_name if requested_name else name.lower().endswith(".ipa")'
 
-          def replacement(match):
-              indent = match.group('indent')
-              return (
-                  f'{indent}for asset in release.get("assets", []):\n'
-                  f'{indent}    name = asset.get("name", "")\n'
-                  f'{indent}    if name == "P6YTOK-login-safe-unsigned.ipa":\n'
-                  f'{indent}        continue\n'
-                  f'{indent}    matches = name == requested_name if requested_name else name.lower().endswith(".ipa")'
-              )
+          matches = [
+              index for index, line in enumerate(lines)
+              if line.strip() == target
+              and index > 0
+              and lines[index - 1].strip() == 'name = asset.get("name", "")'
+          ]
+          if len(matches) != 1:
+              raise SystemExit(f'release IPA selector match count was {len(matches)}, expected 1')
 
-          updated, count = pattern.subn(replacement, text, count=1)
-          if count != 1:
-              raise SystemExit(f'release IPA selector match count was {count}, expected 1')
-          path.write_text(updated, encoding='utf-8')
+          index = matches[0]
+          indent = lines[index][:len(lines[index]) - len(lines[index].lstrip())]
+          lines[index:index] = [
+              f'{indent}if name == "P6YTOK-login-safe-unsigned.ipa":',
+              f'{indent}    continue',
+          ]
+          path.write_text('\n'.join(lines) + '\n', encoding='utf-8')
           PY
 
           git config user.name github-actions[bot]
